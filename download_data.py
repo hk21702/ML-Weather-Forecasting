@@ -75,24 +75,24 @@ def download_data(cds: cdsapi.Client, year: str,
 
 def get_args() -> argparse.Namespace:
     """Returns the arguments passed to the script and ensures they are valid"""
-    north_america = RegionBox(20, 70, -170, -50)
+    na_east = RegionBox(23, 55, -85, -65)
 
     # Argument parser
     parser = argparse.ArgumentParser(
         description='Download ERA5 data from the Copernicus Climate Data Store (CDS)')
 
     # Region box using lat/lon coordinates
-    parser.add_argument('--lat_min', type=float, default=north_america.lat_min,
+    parser.add_argument('--lat_min', type=float, default=na_east.lat_min,
                         help='Minimum latitude')
-    parser.add_argument('--lat_max', type=float, default=north_america.lat_max,
+    parser.add_argument('--lat_max', type=float, default=na_east.lat_max,
                         help='Maximum latitude')
-    parser.add_argument('--lon_min', type=float, default=north_america.lon_min,
+    parser.add_argument('--lon_min', type=float, default=na_east.lon_min,
                         help='Minimum longitude')
-    parser.add_argument('--lon_max', type=float, default=north_america.lon_max,
+    parser.add_argument('--lon_max', type=float, default=na_east.lon_max,
                         help='Maximum longitude')
 
     # Years interval to download
-    parser.add_argument('--start_year', type=str, default='2000',
+    parser.add_argument('--start_year', type=str, default='2010',
                         help='Start year to download data for')
     parser.add_argument('--end_year', type=str, default='2022',
                         help='End year to download data for')
@@ -152,20 +152,16 @@ def main() -> None:
 
     vset1 = VariableSet([
         '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature',
-        '2m_temperature', 'mean_sea_level_pressure', 'mean_wave_direction',
-        'mean_wave_period', 'sea_surface_temperature',
-        'significant_height_of_combined_wind_waves_and_swell',
+        '2m_temperature',
         'surface_pressure', 'total_precipitation',
-    ], 'vset1')
+    ], 'vset3')
 
     vset2 = VariableSet([
-        '10m_u_component_of_neutral_wind', '10m_v_component_of_neutral_wind', 'evaporation',
-        'forecast_albedo', 'high_cloud_cover', 'high_vegetation_cover',
-        'low_cloud_cover', 'low_vegetation_cover', 'medium_cloud_cover',
-        'skin_temperature', 'soil_temperature_level_1', 'total_cloud_cover',
-        'volumetric_soil_water_layer_1',
+        '10m_u_component_of_neutral_wind', '10m_v_component_of_neutral_wind',
+        'forecast_albedo', 'high_cloud_cover',
+        'low_cloud_cover', 'medium_cloud_cover', 'total_cloud_cover',
     ],
-        'vset2')
+        'vset4')
 
     # Create data folder if it doesn't exist
     if not os.path.exists('data'):
