@@ -1,37 +1,35 @@
+"""
+Preprocessing of raw data from the ERA5 dataset to a useable state.
+"""
+
+import argparse
+import concurrent.futures
+import dataclasses
+import os
+import sys
+import time
+
+import cdsapi
+import netCDF4
 import numpy as np
 import pandas as pd
+from netCDF4 import Dataset
 
 
-def downsample_data(data: pd.DataFrame, degree: float):
-    """Downsamples the location data to a given degree, grouped by time.
+def get_args() -> argparse.Namespace:
+    """Parses the command line arguments
 
-    Args:
-        data: The data to downsample.
-        degree: The degree to downsample to, rounded to .25, must be <= than 0.25
+    Returns:
+        argparse.Namespace: The parsed arguments
     """
+    parser = argparse.ArgumentParser(description='Preprocess ERA5 data')
 
-    # Round to a multiple of .25
-    degree = round(degree * 4) / 4
+    # NetCRf folder path
+    parser.add_argument('--netcdf_folder', type=str, default='data',
+                        help='Path to the folder containing the NetCDF files')
 
-    assert degree >= 0.25, 'Degree must be <= 0.25'
-
-    # Get the min and max longitude and latitude
+    return parser.parse_args()
 
 
-def normalize_feature_data(data: pd.DataFrame, features: list[str], target: list[str]) -> pd.DataFrame:
-    """Normalizes the feature data. Target data is normalized but also retained."""
-    # Make a copy of target columns to retain them
-    target_data = data[target].copy()
-
-    # Normalize the feature data
-    data[features] = (data[features] - data[features].mean()
-                      ) / data[features].std()
-
-    # Create new target names for columns
-    target_names = [f'{col}_target' for col in target]
-
-    # Rename target columns
-    target_data.columns = target_names
-
-    # Concatenate the target data to the feature data
-    data = pd.concat([data, target_data], axis=1)
+def main() -> None:
+    pass

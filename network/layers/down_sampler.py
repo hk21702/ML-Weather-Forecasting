@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from network.layers.CoordinateConv import CoordinateConv
+from network.layers.coordinate_conv import CoordinateConv
 
 
 class DownSampler(nn.Module):
