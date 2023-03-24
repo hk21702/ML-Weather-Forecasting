@@ -1,6 +1,11 @@
 """Train a model on the data using given parameters"""
 import argparse
 
+import pandas as pd
+import torch
+import torch.nn as nn
+import xarray as xr
+
 
 def get_args() -> argparse.Namespace:
     """Returns the command line arguments"""
@@ -33,10 +38,16 @@ def get_args() -> argparse.Namespace:
         help='Model to use when training the model')
 
     parser.add_argument(
-        '--data_dir',
+        '--train_path',
         type=str,
-        default='data',
-        help='Directory containing the data to train the model on')
+        default='cache/train.nc',
+        help='Path to the netCDF4 file to train the model on')
+
+    parser.add_argument(
+        '--val_path',
+        type=str,
+        default='cache/val.nc',
+        help='Path to the netCDF4 file to validate the model on')
 
     parser.add_argument(
         '--model_dir',
@@ -99,3 +110,23 @@ def get_args() -> argparse.Namespace:
         help='Prediction delta (hours). How many hours to predict into the future')
 
     return parser.parse_args()
+
+
+def load_data(train_path: str, val_path: str) -> tuple[xr.Dataset, xr.Dataset]:
+    """Loads the data from the given paths
+
+    Args:
+        train_path (str): Path to the netCDF4 file to train the model on
+        val_path (str): Path to the netCDF4 file to validate the model on
+
+    Returns:
+        tuple[xr.Dataset, xr.Dataset]: The training and validation data
+    """
+    # Load the training data
+    train_data = xr.open_dataset(train_path)
+
+    # Load the validation data
+    val_data = xr.open_dataset(val_path)
+
+    return train_data, val_data
+
