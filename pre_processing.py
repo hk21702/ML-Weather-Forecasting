@@ -6,6 +6,7 @@ import argparse
 from tabulate import tabulate
 import os
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -69,7 +70,7 @@ def get_data(netcdf_folder: str) -> xr.Dataset:
 
 
 def cache_data(dataset: xr.Dataset, cache_folder: str,
-               file_name: str) -> None:
+               file_name: str, clean: bool = True) -> None:
     """Caches the data to a nc file"""
 
     # Create the cache folder if it doesn't exist
@@ -79,6 +80,10 @@ def cache_data(dataset: xr.Dataset, cache_folder: str,
     # If filename does not have .nc extension, add it
     if not file_name.endswith('.nc'):
         file_name += '.nc'
+
+    # Clear the cached data if it exists
+    if clean & os.path.exists(os.path.join(cache_folder, file_name)):
+        os.remove(os.path.join(cache_folder, file_name))
 
     print(f'Caching data to {cache_folder} as {file_name}...')
 
@@ -124,13 +129,68 @@ def split_data(dataset: xr.Dataset,
     return train_set, val_set, test_set
 
 
-def main() -> None:
-    """Main function"""
-    args = get_args()
+def add_rh2m(dataset: xr.Dataset) -> xr.Dataset:
+    """Add the relative humidity at 2 meters to the dataset.
 
-    dataset = get_data(args.netcdf_folder)
+    Args:
+        dataset (xr.Dataset): The dataset to add the humidity to
 
-    print(f'Dataset loaded from {args.netcdf_folder}')
+    Returns:
+        xr.Dataset: The dataset with the relative humidity at 2 meters
+    """
+
+    # Convert both t2m and d2m to Celsius from Kelvin
+    t2m = dataset.t2m - 273.15
+    d2m = dataset.d2m - 273.15
+
+    # Calculate the saturation vapor pressure
+    es = 6.112 * xr.apply_ufunc(lambda x: np.exp((17.67 * x) / (x + 243.5)),
+                                t2m, dask='allowed', output_dtypes=[float],
+                                input_core_dims=[[]])
+
+    # Calculate the actual vapor pressure
+    e = 6.112 * xr.apply_ufunc(lambda x: np.exp((17.67 * x) / (x + 243.5)),
+                               d2m, dask='allowed', output_dtypes=[float],
+                               input_core_dims=[[]])
+
+    # Calculate the relative humidity
+    rh = (e / es) * 100
+
+    # Add the relative humidity to the dataset
+    dataset['rh2m'] = rh
+
+    # Add the long name and units
+    dataset.rh2m.attrs['long_name'] = '2 metre relative humidity*'
+    dataset.rh2m.attrs['units'] = '(0 - 1)'
+
+    return dataset
+
+
+def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
+    """Feature engineering on the dataset
+
+    Args:
+        dataset (xr.Dataset): The dataset to do feature engineering on
+
+    Returns:
+        xr.Dataset: The dataset with the feature engineering applied
+    """
+    print(f'Applying feature engineering...')
+
+    # Add the relative humidity at 2 meters
+    dataset = add_rh2m(dataset)
+
+    return dataset
+
+
+def print_dataset_info(dataset: xr.Dataset) -> None:
+    """Prints the dataset info.
+
+    Dimensions, time range, variable count and variable info
+
+    Args:
+        dataset (xr.Dataset): The dataset to print info for
+    """
     print(f'\tDimensions: {dataset.dims}')
     print(
         f'\tTime range: {dataset.time.min().values} - {dataset.time.max().values}')
@@ -144,6 +204,22 @@ def main() -> None:
     )
 
     print(tabulate(variable_info, headers='keys', tablefmt='psql'))
+
+
+def main() -> None:
+    """Main function"""
+    args = get_args()
+
+    dataset = get_data(args.netcdf_folder)
+
+    print(f'Dataset loaded from {args.netcdf_folder}')
+    print_dataset_info(dataset)
+
+    # Apply feature engineering
+    dataset = feature_engineering(dataset)
+
+    print('Dataset after feature engineering:')
+    print_dataset_info(dataset)
 
     # Split the data
     train_set, val_set, test_set = split_data(
