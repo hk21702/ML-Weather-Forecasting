@@ -3,12 +3,12 @@ Preprocessing of raw data from the ERA5 dataset to a useable state.
 """
 
 import argparse
-from tabulate import tabulate
 import os
 
 import numpy as np
 import pandas as pd
 import xarray as xr
+from tabulate import tabulate
 
 
 def get_args() -> argparse.Namespace:
@@ -175,7 +175,7 @@ def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
     Returns:
         xr.Dataset: The dataset with the feature engineering applied
     """
-    print(f'Applying feature engineering...')
+    print('Applying feature engineering...')
 
     # Add the relative humidity at 2 meters
     dataset = add_rh2m(dataset)
