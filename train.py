@@ -130,3 +130,26 @@ def load_data(train_path: str, val_path: str) -> tuple[xr.Dataset, xr.Dataset]:
 
     return train_data, val_data
 
+
+def create_rolling(dataset: xr.Dataset,
+                   context_delta: int,
+                   target_delta: int,
+                   context_apothem: int) -> xr.core.rolling.DatasetRolling:
+    """Creates a rolling window on time and space dimensions.
+
+        Args:
+            context_delta (int): Number of time steps to look back in the context
+            target_delta (int): Number of time steps to predict into the future
+            context_apothem (int): Apothem of the context area
+
+        Returns:
+            xr.DataArray: The rolling time
+    """
+    window_size = context_delta + target_delta
+    width = context_apothem * 2 + 1
+
+    return dataset.rolling(dim={'time', 'longitude', 'latitude'},
+                           center=True,
+                           time=window_size,
+                           longitude=width,
+                           latitude=width)
