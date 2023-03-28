@@ -1,27 +1,25 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import pandas as pd
 
+from network.layers.down_sampler import DownSampler
+from network.model_config import ModelConfig
 
-@dataclass
-class ModelConfig:
-    """Configuration for the model
 
-    Attributes:
-        channels (int): Number of channels in the input
-        target_dim (int): Squared dim of the target area
-        context_dim (int): Squared dim of the context area
-        target_delta (int): Number of time steps to predict into the future
-        context_delta (int): Number of time steps to look back in the context
-        feature_variables (list[str]): List of features to use (short variable names)
-        target_variable (str): Target variable to predict (short variable name)
-    """
-    channels: int
-    target_dim: int
-    context_dim: int
-    target_delta: int
-    context_delta: int
-    feature_variables: list[str]
-    target_variable: str
+class Model(nn.Module):
+    """Main model layer"""
+
+    def __init__(self, hidden_dims: int,
+                 kernel_size: int, layers: int, heads: int,
+                 dropout: float, model_config: ModelConfig):
+        super(Model, self).__init__()
+
+        self.hidden_dims = hidden_dims
+        self.kernel_size = kernel_size
+        self.drop = nn.Dropout(dropout)
+        self.model_config = model_config
+
+        self.encoder = DownSampler(
+            len(self.model_config.feature_variables) +
+            self.model_config.context_steps,
+            hidden_dims)
