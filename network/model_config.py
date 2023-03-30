@@ -36,7 +36,7 @@ class ModelConfig:
 
     input_chans: int = 20
 
-    kernel_size: Union(int, tuple[int, int]) = (3, 3)
+    kernel_size: Union[int, tuple[int, int]] = (3, 3)
 
     def __post_init__(self):
         self.total_steps = self.context_steps + self.target_steps
