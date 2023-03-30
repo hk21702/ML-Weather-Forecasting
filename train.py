@@ -2,9 +2,18 @@
 import argparse
 
 import pandas as pd
+import pytorch_lightning as pl
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 import xarray as xr
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from torch.utils.data import DataLoader
+
+from network.data_pipeline import get_ts_dataset
+from network.model import Model
+from network.model_config import ModelConfig
+
+TARGET_FEATS = ['t2m', 'tp']
 
 
 def get_args() -> argparse.Namespace:
@@ -16,7 +25,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         '--epochs',
         type=int,
-        default=10,
+        default=4,
         help='Number of epochs to train the model for')
 
     parser.add_argument(
@@ -32,10 +41,11 @@ def get_args() -> argparse.Namespace:
         help='Learning rate to use when training the model')
 
     parser.add_argument(
-        '--model',
+        '--model_type',
         type=str,
-        default='resnet18',
-        help='Model to use when training the model')
+        default='conv_lstm',
+        help='Model type to use [conv_lstm, lstm, gru]. Note that non,\
+            Convoluted LSTM models can only handle single point outputs. Default: conv_lstm.')
 
     parser.add_argument(
         '--train_path',
@@ -54,6 +64,13 @@ def get_args() -> argparse.Namespace:
         type=str,
         default='models',
         help='Directory to save the trained model to')
+
+    parser.add_argument(
+        '--model_name',
+        type=str,
+        default='model',
+        help='Name of the model to save'
+    )
 
     parser.add_argument(
         '--log_dir',
@@ -76,17 +93,17 @@ def get_args() -> argparse.Namespace:
 
     # Target cubed size
     parser.add_argument(
-        '--target_cubed_size',
+        '--target_apothem',
         type=int,
         default=3,
-        help='Target cubed size to predict')
+        help='Target apothem to predict')
 
     # Context cubed size
     parser.add_argument(
-        '--context_cubed_size',
+        '--context_apothem',
         type=int,
         default=3,
-        help='Context cubed size for input')
+        help='Context apothem for input')
 
     # Context downsampling factor
     parser.add_argument(
@@ -97,17 +114,17 @@ def get_args() -> argparse.Namespace:
 
     # Context time size
     parser.add_argument(
-        '--context_time_size',
+        '--context_steps',
         type=int,
-        default=3,
-        help='Context time size (hours) for input')
+        default=6,
+        help='Context time steps (hours) used for input')
 
     # Prediction delta
     parser.add_argument(
-        '--prediction_delta',
+        '--target_steps',
         type=int,
         default=3,
-        help='Prediction delta (hours). How many hours to predict into the future')
+        help='Target time steps (hours). How many hours to predict into the future')
 
     return parser.parse_args()
 
@@ -131,25 +148,136 @@ def load_data(train_path: str, val_path: str) -> tuple[xr.Dataset, xr.Dataset]:
     return train_data, val_data
 
 
-def create_rolling(dataset: xr.Dataset,
-                   context_steps: int,
-                   target_delta: int,
-                   context_apothem: int) -> xr.core.rolling.DatasetRolling:
-    """Creates a rolling window on time and space dimensions.
+class LightningModel(pl.LightningModule):
+    def __init__(self,
+                 config: ModelConfig,
+                 learning_rate: float = 0.001):
+        super().__init__()
+        self.config = config
+        self.model = Model(0.3, self.config)
+        self.learning_rate = learning_rate
 
-        Args:
-            context_steps (int): Number of time steps to look back in the context
-            target_delta (int): Number of time steps to predict into the future
-            context_apothem (int): Apothem of the context area
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
 
-        Returns:
-            xr.DataArray: The rolling time
-    """
-    window_size = context_steps + target_delta
-    width = context_apothem * 2 + 1
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = F.mse_loss(y_hat, y)
+        self.log('train_loss', loss)
+        return loss
 
-    return dataset.rolling(dim={'time', 'longitude', 'latitude'},
-                           center=True,
-                           time=window_size,
-                           longitude=width,
-                           latitude=width)
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self(x)
+        loss = F.mse_loss(y_hat, y)
+        self.log('val_loss', loss)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
+
+if __name__ == '__main__':
+    args = get_args()
+
+    # Load the data
+    train_data, val_data = load_data(args.train_path, args.val_path)
+
+    # Geat feature variables from train_data
+    feature_variables = list[train_data.variables]
+
+    train_tsds = get_ts_dataset(train_data,
+                                TARGET_FEATS,
+                                context_steps=args.context_steps,
+                                target_steps=args.target_steps,
+                                target_lon=args.target_lon,
+                                target_lat=args.target_lat,
+                                context_apothem=args.context_apothem
+                                )
+
+    val_tsds = get_ts_dataset(val_data,
+                              TARGET_FEATS,
+                              context_steps=args.context_steps,
+                              target_steps=args.target_steps,
+                              target_lon=args.target_lon,
+                              target_lat=args.target_lat,
+                              context_apothem=args.context_apothem
+                              )
+
+    # Data loaders
+    train_loader = DataLoader(train_tsds,
+                              batch_size=args.batch_size,
+                              shuffle=True,
+                              num_workers=4)
+    val_loader = DataLoader(val_tsds,
+                            batch_size=args.batch_size,
+                            shuffle=False,
+                            num_workers=4)
+
+    # Get batch dimensions
+    batch = next(iter(train_loader))
+    batch_dims = batch[0].shape
+
+    print(f'Batch dimensions: {batch_dims}')
+    print(f'Input channels: {batch_dims[2]}')
+
+    config = ModelConfig(
+        feature_variables,
+        TARGET_FEATS,
+        model_type=args.model_type,
+        context_apothem=args.context_apothem,
+        context_steps=args.context_steps,
+        target_apothem=args.target_apothem,
+        target_steps=args.target_steps,
+        input_chans=batch_dims[2],
+    )
+
+    # Create the model
+    model = LightningModel(args.learning_rate)
+
+    # Create the callbacks
+    early_stop_callback = EarlyStopping(monitor='val_loss',
+                                        min_delta=0.00,
+                                        patience=3,
+                                        verbose=False,
+                                        mode='min')
+    checkpoint_callback = ModelCheckpoint(monitor='val_loss',
+                                          dirpath=args.model_dir,
+                                          filename='model-{epoch:02d}-{val_loss:.2f}',
+                                          save_top_k=1,
+                                          mode='min')
+
+    # Create the trainer
+    trainer = pl.Trainer(gpus=1,
+                         max_epochs=args.epochs,
+                         callbacks=[early_stop_callback, checkpoint_callback],
+                         logger=pl.loggers.TensorBoardLogger(args.log_dir))
+
+    # Train the model
+    trainer.fit(model, train_loader, val_loader)
+
+    # Save the model
+    trainer.save_checkpoint(f'{args.model_dir}/{args.model_name}.ckpt')
+
+    # Test the model
+    trainer.test()
+
+    # Save the model config
+    model.config.save(args.model_dir)
+
+    # Save the model hyperparameters
+    pd.DataFrame({
+        'epochs': [args.epochs],
+        'batch_size': [args.batch_size],
+        'learning_rate': [args.learning_rate],
+        'model': [args.model],
+        'train_path': [args.train_path],
+        'val_path': [args.val_path],
+        'target_lon': [args.target_lon],
+        'target_lat': [args.target_lat],
+        'target_cubed_size': [args.target_cubed_size],
+        'context_cube_size': [args.context_cubed_size],
+        'context_downsampling_factor': [args.context_downsampling_factor],
+        'context_time_size': [args.context_time_size],
+        'prediction_delta': [args.prediction_delta]
+    }).to_csv(f'{args.model_dir}/hyperparameters_{args.model_name}.csv', index=False)
