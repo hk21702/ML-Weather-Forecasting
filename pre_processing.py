@@ -47,7 +47,36 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--train_file', type=str, default='train.nc',
                         help='Name of the training file')
 
+    # Target longitude
+    parser.add_argument('--target_lon', type=float, default=-80,
+                        help='Target longitude')
+
+    # Target latitude
+    parser.add_argument('--target_lat', type=float, default=43,
+                        help='Target latitude')
+
+    # Context apothem
+    parser.add_argument('--context_apothem', type=float, default=3,
+                        help='Context apothem')
+
     return parser.parse_args()
+
+
+def check_args(args: argparse.Namespace):
+    """Checks the command line arguments"""
+
+    # Apothem must be positive
+    assert args.context_apothem > 0, 'Context apothem must be positive'
+
+    # Target longitude must be between -180 and 180
+    assert -180 <= args.target_lon <= 180, 'Target longitude must be between -180 and 180'
+
+    # Target latitude must be between -90 and 90
+    assert -90 <= args.target_lat <= 90, 'Target latitude must be between -90 and 90'
+
+    # Ratios must be positive
+    assert args.val_ratio >= 0, 'Validation ratio must be positive'
+    assert args.test_ratio >= 0, 'Test ratio must be positive'
 
 
 def get_data(netcdf_folder: str) -> xr.Dataset:
@@ -225,16 +254,21 @@ def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
-def crop_target(dataset: xr.Dataset,
-                target_feats: list[str]) -> xr.Dataset:
-    """Crops the target features from the dataset such that
-        the target features are the only features left."""
+def crop_area(dataset: xr.Dataset,
+              target_lat: float,
+              target_lon: float,
+              context_apothem: float,) -> xr.Dataset:
+    """ Crop the dataset to the target area."""
 
-    # Get the target features
-    target_feats = [feat for feat in target_feats if feat in dataset.variables]
+    # Get min and max lat and lon
+    min_lat = target_lat - context_apothem
+    max_lat = target_lat + context_apothem
+    min_lon = target_lon - context_apothem
+    max_lon = target_lon + context_apothem
 
     # Crop the dataset
-    dataset = dataset[target_feats]
+    dataset = dataset.sel(latitude=slice(max_lat, min_lat),
+                          longitude=slice(min_lon, max_lon))
 
     return dataset
 
@@ -265,11 +299,16 @@ def print_dataset_info(dataset: xr.Dataset) -> None:
 def main() -> None:
     """Main function"""
     args = get_args()
+    check_args(args)
 
     dataset = get_data(args.netcdf_folder)
 
     print(f'Dataset loaded from {args.netcdf_folder}')
     print_dataset_info(dataset)
+
+    # Crop the dataset to the target area
+    dataset = crop_area(dataset, args.target_lat, args.target_lon,
+                        args.context_apothem)
 
     # Apply feature engineering
     dataset = feature_engineering(dataset)

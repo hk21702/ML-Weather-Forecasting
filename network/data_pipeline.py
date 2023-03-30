@@ -4,6 +4,7 @@ time series dataset.
 """
 
 import xarray as xr
+from pytorch_forecasting.data.encoders import MultiNormalizer, TorchNormalizer
 from pytorch_forecasting.data.timeseries import TimeSeriesDataSet
 
 
@@ -13,8 +14,8 @@ def get_ts_dataset(ds: xr.Dataset,
                    target_steps: int,
                    target_lon: float,
                    target_lat: float,
-                   context_apothem: int,
-                   ) -> TimeSeriesDataSet:
+                   context_apothem: float,
+                   debug: bool = True) -> TimeSeriesDataSet:
     """
     Args:
         ds: (time, longitude, latitude) - Dataset to convert
@@ -27,15 +28,52 @@ def get_ts_dataset(ds: xr.Dataset,
     Returns:
         TimeSeriesDataSet
     """
+    # Calc the corners of the context square
+    context_lon_min = target_lon - context_apothem
+    context_lon_max = target_lon + context_apothem
+    context_lat_min = target_lat - context_apothem
+    context_lat_max = target_lat + context_apothem
 
-    # Crop the dataset to the context square
-    ds = ds.sel(longitude=slice(target_lon - context_apothem,
-                                target_lon + context_apothem),
-                latitude=slice(target_lat - context_apothem,
-                               target_lat + context_apothem))
+    if debug:
+        print(f"Target lon: {target_lon}, lat: {target_lat}")
+        print(
+            f"Context lon: {context_lon_min} to {context_lon_max}, lat: {context_lat_min} to {context_lat_max}")
 
-    # Convert to Dataframe
-    df = ds.to_dataframe()
+    # Check that the context square is within the dataset
+    assert context_lon_min >= ds.longitude.min(
+    ), "Context square is outside of dataset, check longitude"
+    assert context_lon_max <= ds.longitude.max(
+    ), "Context square is outside of dataset, check longitude"
+    assert context_lat_min >= ds.latitude.min(
+    ), "Context square is outside of dataset, check latitude"
+    assert context_lat_max <= ds.latitude.max(
+    ), "Context square is outside of dataset, check latitude"
+
+    # Filter the dataset to the context square
+    ds = ds.sel(longitude=slice(context_lon_min, context_lon_max))
+
+    ds = ds.sel(latitude=slice(context_lat_max, context_lat_min))
+
+    # Convert time coordinate to integer representation
+    ds["time"] = ds.time.astype(int)
+
+    # Convert to pandas
+    df = ds.to_dataframe().reset_index()
+
+    # Sort index by time
+    df = df.sort_values(by=["time"])
+
+    if debug:
+        print(df.head())
+
+    none_normalizer = MultiNormalizer(
+        [TorchNormalizer('identity'), TorchNormalizer('identity')])
+
+    # Get all features other than longitude and latitude, time, hour, day, month, year
+    # These are features we will not know in the future.
+
+    time_varying_unknown_reals = [col for col in df.columns if col not in [
+        'longitude', 'latitude', 'time', 'hour', 'day', 'month', 'year']]
 
     # Create a time series dataset
     ts_dataset = TimeSeriesDataSet(
@@ -47,7 +85,12 @@ def get_ts_dataset(ds: xr.Dataset,
         max_encoder_length=context_steps,
         min_prediction_length=target_steps,
         max_prediction_length=target_steps,
-        static_categoricals=["longitude", "latitude"],
-        add_relative_time_idx=True)
+        static_reals=["longitude", "latitude"],
+        add_relative_time_idx=True,
+        target_normalizer=none_normalizer,
+        static_categoricals=[],
+        time_varying_known_categoricals=[],
+        time_varying_unknown_categoricals=[],
+        time_varying_unknown_reals=time_varying_unknown_reals)
 
     return ts_dataset
