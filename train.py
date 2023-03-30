@@ -126,6 +126,12 @@ def get_args() -> argparse.Namespace:
         default=3,
         help='Target time steps (hours). How many hours to predict into the future')
 
+    # Debug mode
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Debug mode. Prints extra information')
+
     return parser.parse_args()
 
 
@@ -180,6 +186,8 @@ class LightningModel(pl.LightningModule):
 if __name__ == '__main__':
     args = get_args()
 
+    print("Preparing data...")
+
     # Load the data
     train_data, val_data = load_data(args.train_path, args.val_path)
 
@@ -192,8 +200,10 @@ if __name__ == '__main__':
                                 target_steps=args.target_steps,
                                 target_lon=args.target_lon,
                                 target_lat=args.target_lat,
-                                context_apothem=args.context_apothem
+                                context_apothem=args.context_apothem,
+                                debug=args.debug
                                 )
+    print("Train dataset created")
 
     val_tsds = get_ts_dataset(val_data,
                               TARGET_FEATS,
@@ -201,8 +211,11 @@ if __name__ == '__main__':
                               target_steps=args.target_steps,
                               target_lon=args.target_lon,
                               target_lat=args.target_lat,
-                              context_apothem=args.context_apothem
+                              context_apothem=args.context_apothem,
+                              debug=args.debug
                               )
+    
+    print("Validation dataset created")
 
     # Data loaders
     train_loader = DataLoader(train_tsds,
