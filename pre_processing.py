@@ -166,6 +166,47 @@ def add_rh2m(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
+def manipulate_time(dataset: xr.Dataset,
+                    hour: bool = True,
+                    day: bool = True,
+                    month: bool = True,
+                    year: bool = True) -> xr.Dataset:
+    """
+    Add discrete variables for the hour, day, month and year into the dataset.
+
+        Args:
+            dataset (xr.Dataset): The dataset to add the discrete variables to
+            hour (bool, optional): Add the hour variable. Defaults to True.
+            day (bool, optional): Add the day variable. Defaults to True.
+            month (bool, optional): Add the month variable. Defaults to True.
+            year (bool, optional): Add the year variable. Defaults to True.
+    """
+    # Add the hour variable
+    if hour:
+        dataset['hour'] = dataset.time.dt.hour
+        dataset.hour.attrs['long_name'] = 'Hour of the day'
+        dataset.hour.attrs['units'] = 'hour'
+
+    # Add the day variable
+    if day:
+        dataset['day'] = dataset.time.dt.day
+        dataset.day.attrs['long_name'] = 'Day of the month'
+        dataset.day.attrs['units'] = 'day'
+
+    # Add the month variable
+    if month:
+        dataset['month'] = dataset.time.dt.month
+        dataset.month.attrs['long_name'] = 'Month of the year'
+        dataset.month.attrs['units'] = 'month'
+
+    # Add the year variable
+    if year:
+        dataset['year'] = dataset.time.dt.year
+        dataset.year.attrs['long_name'] = 'Year'
+
+    return dataset
+
+
 def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
     """Feature engineering on the dataset
 
@@ -179,6 +220,21 @@ def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
 
     # Add the relative humidity at 2 meters
     dataset = add_rh2m(dataset)
+    dataset = manipulate_time(dataset)
+
+    return dataset
+
+
+def crop_target(dataset: xr.Dataset,
+                target_feats: list[str]) -> xr.Dataset:
+    """Crops the target features from the dataset such that
+        the target features are the only features left."""
+
+    # Get the target features
+    target_feats = [feat for feat in target_feats if feat in dataset.variables]
+
+    # Crop the dataset
+    dataset = dataset[target_feats]
 
     return dataset
 
