@@ -79,7 +79,7 @@ class ConvLSTM(nn.Module):
     """
 
     def __init__(self, input_dim: int, hidden_dim: int,
-                 kernel_size: tuple(int, int), num_layers: int,
+                 kernel_size: tuple[int, int], num_layers: int,
                  bias: bool = True,
                  return_all: bool = False) -> None:
         super(ConvLSTM, self).__init__()
