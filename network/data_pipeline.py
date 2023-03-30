@@ -4,7 +4,7 @@ time series dataset.
 """
 
 import xarray as xr
-from pytorch_forecasting.data.encoders import MultiNormalizer, TorchNormalizer
+from pytorch_forecasting.data.encoders import MultiNormalizer, TorchNormalizer, NaNLabelEncoder
 from pytorch_forecasting.data.timeseries import TimeSeriesDataSet
 
 
@@ -54,8 +54,10 @@ def get_ts_dataset(ds: xr.Dataset,
 
     ds = ds.sel(latitude=slice(context_lat_max, context_lat_min))
 
-    # Convert time coordinate to integer representation
-    ds["time"] = ds.time.astype(int)
+    # Convert time coordinate to integer representation on hour scale
+    ds['time'] = ds.time.astype('int64') // 1e9 // 3600
+    # Convert to int
+    ds['time'] = ds.time.astype('int32')
 
     # Convert to pandas
     df = ds.to_dataframe().reset_index()
@@ -85,12 +87,17 @@ def get_ts_dataset(ds: xr.Dataset,
         max_encoder_length=context_steps,
         min_prediction_length=target_steps,
         max_prediction_length=target_steps,
-        static_reals=["longitude", "latitude"],
         add_relative_time_idx=True,
         target_normalizer=none_normalizer,
-        static_categoricals=[],
+        categorical_encoders={'longitude': NaNLabelEncoder(add_nan=True),
+                              'latitude': NaNLabelEncoder(add_nan=True)},
         time_varying_known_categoricals=[],
         time_varying_unknown_categoricals=[],
-        time_varying_unknown_reals=time_varying_unknown_reals)
+        time_varying_unknown_reals=time_varying_unknown_reals,
+        allow_missing_timesteps=False)
+
+    if debug:
+        print("Created TimeSeriesDataSet object...")
+        print(f"\tTarget features: {ts_dataset.target_names}")
 
     return ts_dataset
