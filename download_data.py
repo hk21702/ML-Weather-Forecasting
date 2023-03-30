@@ -92,7 +92,7 @@ def get_args() -> argparse.Namespace:
                         help='Maximum longitude')
 
     # Years interval to download
-    parser.add_argument('--start_year', type=str, default='2010',
+    parser.add_argument('--start_year', type=str, default='2014',
                         help='Start year to download data for')
     parser.add_argument('--end_year', type=str, default='2022',
                         help='End year to download data for')

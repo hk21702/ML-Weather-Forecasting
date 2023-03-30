@@ -259,6 +259,7 @@ def crop_area(dataset: xr.Dataset,
               target_lon: float,
               context_apothem: float,) -> xr.Dataset:
     """ Crop the dataset to the target area."""
+    print("Cropping dataset...")
 
     # Get min and max lat and lon
     min_lat = target_lat - context_apothem
