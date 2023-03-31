@@ -96,21 +96,26 @@ def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoad
     for feat in args.target_feats:
         assert feat in feature_variables, f'{feat} is not a valid feature'
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Create the datasets from window iter ds
     train_data = WindowIterDS(train_data,
                               args.context_steps,
                               args.horizon,
-                              args.target_feats)
+                              args.target_feats,
+                              device)
 
     val_data = WindowIterDS(val_data,
                             args.context_steps,
                             args.horizon,
-                            args.target_feats)
+                            args.target_feats,
+                            device)
 
     test_data = WindowIterDS(test_data,
                              args.context_steps,
                              args.horizon,
-                             args.target_feats)
+                             args.target_feats,
+                             device)
 
     # Create the model config
     config = ModelConfig(train_data)
@@ -143,8 +148,6 @@ if __name__ == '__main__':
     # Create the model
     model = LightningModel('conv_lstm', 0.2, config,
                            args.learning_rate)
-    print(model.model.summarize("full"))
-    print(model.model.hparams)
 
     # Create the callbacks
     early_stop_callback = EarlyStopping(monitor='val_loss',
@@ -159,7 +162,7 @@ if __name__ == '__main__':
                                           mode='min')
 
     # Create the trainer
-    trainer = pl.Trainer(gpus=1,
+    trainer = pl.Trainer(
                          max_epochs=args.epochs,
                          callbacks=[early_stop_callback, checkpoint_callback],
                          logger=pl.loggers.TensorBoardLogger(args.log_dir))
