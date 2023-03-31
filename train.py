@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 
-from network.model import Model
+from network.conv_lstm_model import ConvLSTMModel
 from network.model_config import ModelConfig
 from network.window_iter_ds import WindowIterDS
 from args_setup import setup_train_args
@@ -36,14 +36,17 @@ class LightningModel(pl.LightningModule):
     def __init__(self,
                  model_type: str,
                  dropout: float,
-                 kernel_size: Union[int, tuple[int]],
                  config: ModelConfig,
                  learning_rate: float = 0.001):
         super().__init__()
-        self.model = Model.from_dataset(config,
-                                        model_type=model_type,
-                                        dropout=dropout,
-                                        kernel_size=kernel_size)
+
+        if model_type == 'conv_lstm':
+            self.model = ConvLSTMModel(dropout,
+                                       config)
+        else:
+            raise NotImplementedError(
+                f'{model_type} is not a valid model type')
+
         self.learning_rate = learning_rate
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -137,7 +140,8 @@ if __name__ == '__main__':
     args = get_args()
 
     # Set up the data loaders and model config
-    train_loader, val_loader, test_loader, train_data = setup_loaders_config(args)
+    train_loader, val_loader, test_loader, train_data = setup_loaders_config(
+        args)
 
     # Create the model
     model = LightningModel('conv_lstm', 0.2, (3, 3),

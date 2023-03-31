@@ -9,13 +9,13 @@ from network.layers.simple_lstm import SimpleLSTM
 from network.model_config import ModelConfig
 
 
-class Model(nn.Module):
-    """Main model layer"""
+class ConvLSTMModel(nn.Module):
+    """Convolutional LSTM model"""
 
     def __init__(self,
                  dropout: float,
                  model_config: ModelConfig):
-        super(Model, self).__init__()
+        super(ConvLSTMModel, self).__init__()
 
         self.model_config = model_config
 
