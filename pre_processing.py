@@ -202,6 +202,7 @@ def manipulate_time(dataset: xr.Dataset,
                     year: bool = True) -> xr.Dataset:
     """
     Add discrete variables for the hour, day, month and year into the dataset.
+    Also mainpulates the time coordinate to be in integer form on an hour timestep.
 
         Args:
             dataset (xr.Dataset): The dataset to add the discrete variables to
@@ -232,6 +233,14 @@ def manipulate_time(dataset: xr.Dataset,
     if year:
         dataset['year'] = dataset.time.dt.year
         dataset.year.attrs['long_name'] = 'Year'
+
+    # Convert time coordinate to integer representation on hour scale
+    dataset['time'] = dataset.time.astype('int64') // 1e9 // 3600
+    # Convert to int
+    dataset['time'] = dataset.time.astype('int32')
+
+    dataset.time.attrs['long_name'] = 'Time'
+    dataset.time.attrs['units'] = 'hours since 1970-01-01 00:00:00'
 
     return dataset
 
@@ -289,7 +298,7 @@ def print_dataset_info(dataset: xr.Dataset) -> None:
 
     # Get variable name and long name. Unit when attribute exists
     variable_info = pd.DataFrame(
-        [[variable, dataset[variable].long_name, dataset[variable].attrs.get('units', None)]
+        [[variable, dataset[variable].attrs.get('long_name', None), dataset[variable].attrs.get('units', None)]
          for variable in dataset.variables],
         columns=['Variable', 'Long Name', 'Unit']
     )
@@ -329,7 +338,8 @@ def main() -> None:
     print(
         f'Test set time range: {test_set.time.min().values} - {test_set.time.max().values}')
 
-    # Cache the data
+    # Cache the datasets
+    print("Caching datasets...")
     cache_data(train_set, args.cache_folder, args.train_file)
     cache_data(val_set, args.cache_folder, args.val_file)
     cache_data(test_set, args.cache_folder, args.test_file)

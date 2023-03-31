@@ -9,15 +9,21 @@ from torch.utils.data import IterableDataset
 class WindowIterDS(IterableDataset):
     """
         Iterable dataset that produced sliding windows of data.
+
+        Args:
+            ds: Dataset to iterate over
+            context_steps: Number of time steps to use as context
+            horizon: Number of time steps to predict into the future
+            targets: List of target variables
     """
 
-    def __init__(self, ds: xr.Dataset, context_size: int, horizon: int, targets: list[str],
+    def __init__(self, ds: xr.Dataset, context_steps: int, horizon: int, targets: list[str],
                  steps: int = 1):
         super(WindowIterDS).__init__()
 
-        self.context_size = context_size
+        self.context_steps = context_steps
         self.horizon = horizon
-        self.window_size = context_size + horizon
+        self.window_size = context_steps + horizon
         self.steps = steps
         self.targets = targets
 
@@ -34,14 +40,18 @@ class WindowIterDS(IterableDataset):
 
     def _get_xy(self, sample):
         # Get the input and labels
-        features = sample.isel(time=slice(0, self.context_size))
+        features = sample.isel(time=slice(0, self.context_steps))
         labels = sample.isel(time=slice(
-            self.context_size, self.window_size))
+            self.context_steps, self.window_size))
 
         # Only keep target variables in labels
         labels = labels[self.targets]
 
-        return features.values, labels.values
+        # To DataArray
+        features = features.to_array('channels')
+        labels = labels.to_array('channels')
+
+        return features.to_numpy(), labels.to_numpy()
 
     def __iter__(self):
         """for sample in self.bgen:

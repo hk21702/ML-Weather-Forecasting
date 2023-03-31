@@ -21,7 +21,6 @@ class Model(nn.Module):
 
         self.hidden_dims = self.model_config.hidden_dims
         self.kernel_size = self.model_config.kernel_size
-        self.drop = nn.Dropout(dropout)
 
         self.input_channels = self.model_config.input_chans
         self.output_chans = self.model_config.output_chans
@@ -55,6 +54,8 @@ class Model(nn.Module):
             raise ValueError('Invalid model type')
 
         self.ct = ConditionTime(self.output_steps)
+
+        self.drop = nn.Dropout(dropout)
 
         self.head = nn.Conv2d(
             in_channels=self.hidden_dims,

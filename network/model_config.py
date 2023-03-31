@@ -1,8 +1,8 @@
-from dataclasses import dataclass
 from typing import Union
 
+from network.window_iter_ds import WindowIterDS
 
-@dataclass
+
 class ModelConfig:
     """Configuration for the model
 
@@ -37,6 +37,18 @@ class ModelConfig:
     input_chans: int = 20
 
     kernel_size: Union[int, tuple[int, int]] = (3, 3)
+
+    def __init__(self, ds: WindowIterDS):
+        assert len(ds) > 0, 'Dataset must not be empty'
+
+        self.context_size: int = ds.context_steps
+        self.horizon: int = ds.horizon
+        self.window_size: int = ds.window_size
+        self.targets = ds.targets
+
+        sample_features, sample_labels = ds[0]
+
+        self.input_chans = sample_features.shape[0]
 
     def __post_init__(self):
         self.total_steps = self.context_steps + self.target_steps

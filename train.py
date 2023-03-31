@@ -1,166 +1,49 @@
 """Train a model on the data using given parameters"""
 import argparse
+from typing import Union
 
 import pandas as pd
+import xarray as xr
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-import xarray as xr
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
-from network.data_pipeline import get_ts_dataset
+
 from network.model import Model
 from network.model_config import ModelConfig
+from network.window_iter_ds import WindowIterDS
+from args_setup import setup_train_args
 
 TARGET_FEATS = ['t2m', 'tp']
 
 
 def get_args() -> argparse.Namespace:
-    """Returns the command line arguments"""
-
-    parser = argparse.ArgumentParser(
-        description='Train a model on the data using given parameters')
-
-    parser.add_argument(
-        '--epochs',
-        type=int,
-        default=4,
-        help='Number of epochs to train the model for')
-
-    parser.add_argument(
-        '--batch_size',
-        type=int,
-        default=32,
-        help='Batch size to use when training the model')
-
-    parser.add_argument(
-        '--learning_rate',
-        type=float,
-        default=0.001,
-        help='Learning rate to use when training the model')
-
-    parser.add_argument(
-        '--model_type',
-        type=str,
-        default='conv_lstm',
-        help='Model type to use [conv_lstm, lstm, gru]. Note that non,\
-            Convoluted LSTM models can only handle single point outputs. Default: conv_lstm.')
-
-    parser.add_argument(
-        '--train_path',
-        type=str,
-        default='cache/train.nc',
-        help='Path to the netCDF4 file to train the model on')
-
-    parser.add_argument(
-        '--val_path',
-        type=str,
-        default='cache/val.nc',
-        help='Path to the netCDF4 file to validate the model on')
-
-    parser.add_argument(
-        '--model_dir',
-        type=str,
-        default='models',
-        help='Directory to save the trained model to')
-
-    parser.add_argument(
-        '--model_name',
-        type=str,
-        default='model',
-        help='Name of the model to save'
-    )
-
-    parser.add_argument(
-        '--log_dir',
-        type=str,
-        default='logs',
-        help='Directory to save the training logs to')
-
-    # Target longitude and latitude
-    parser.add_argument(
-        '--target_lon',
-        type=float,
-        default=-80,
-        help='Target longitude to predict')
-
-    parser.add_argument(
-        '--target_lat',
-        type=float,
-        default=43,
-        help='Target latitude to predict')
-
-    # Target cubed size
-    parser.add_argument(
-        '--target_apothem',
-        type=int,
-        default=3,
-        help='Target apothem to predict')
-
-    # Context cubed size
-    parser.add_argument(
-        '--context_apothem',
-        type=int,
-        default=3,
-        help='Context apothem for input')
-
-    # Context downsampling factor
-    parser.add_argument(
-        '--context_downsampling_factor',
-        type=int,
-        default=2,
-        help='Context downsampling factor for input')
-
-    # Context time size
-    parser.add_argument(
-        '--context_steps',
-        type=int,
-        default=6,
-        help='Context time steps (hours) used for input')
-
-    # Prediction delta
-    parser.add_argument(
-        '--target_steps',
-        type=int,
-        default=3,
-        help='Target time steps (hours). How many hours to predict into the future')
-
-    # Debug mode
-    parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='Debug mode. Prints extra information')
-
-    return parser.parse_args()
-
-
-def load_data(train_path: str, val_path: str) -> tuple[xr.Dataset, xr.Dataset]:
-    """Loads the data from the given paths
-
-    Args:
-        train_path (str): Path to the netCDF4 file to train the model on
-        val_path (str): Path to the netCDF4 file to validate the model on
-
-    Returns:
-        tuple[xr.Dataset, xr.Dataset]: The training and validation data
     """
-    # Load the training data
-    train_data = xr.open_dataset(train_path)
+    Gets and checks the command line arguments for errors
+    """
+    parser = setup_train_args()
+    args = parser.parse_args()
 
-    # Load the validation data
-    val_data = xr.open_dataset(val_path)
+    # Max workers is positive integer
+    assert args.max_workers >= 0, 'Max workers must be a positive integer'
 
-    return train_data, val_data
+    return args
 
 
 class LightningModel(pl.LightningModule):
     def __init__(self,
+                 model_type: str,
+                 dropout: float,
+                 kernel_size: Union[int, tuple[int]],
                  config: ModelConfig,
                  learning_rate: float = 0.001):
         super().__init__()
-        self.config = config
-        self.model = Model(0.3, self.config)
+        self.model = Model.from_dataset(config,
+                                        model_type=model_type,
+                                        dropout=dropout,
+                                        kernel_size=kernel_size)
         self.learning_rate = learning_rate
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -183,70 +66,84 @@ class LightningModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
 
-if __name__ == '__main__':
-    args = get_args()
+def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoader, DataLoader, ModelConfig]:
+    """
+    Sets up the data loaders and model config
+
+    Args:
+        args (argparse.Namespace): The command line arguments
+
+    Returns:
+        tuple[DataLoader, DataLoader, DataLoader, ModelConfig]: The train, val, test data loaders and the model config
+    """
 
     print("Preparing data...")
 
-    # Load the data
-    train_data, val_data = load_data(args.train_path, args.val_path)
+    # Load the data from netcdf files
+    train_data = xr.open_dataset(args.train_path)
+    val_data = xr.open_dataset(args.val_path)
+    test_data = xr.open_dataset(args.val_path)
+
+    print("Data loaded, creating datasets...")
 
     # Geat feature variables from train_data
-    feature_variables = list[train_data.variables]
+    feature_variables = train_data.data_vars.keys()
 
-    train_tsds = get_ts_dataset(train_data,
-                                TARGET_FEATS,
-                                context_steps=args.context_steps,
-                                target_steps=args.target_steps,
-                                target_lon=args.target_lon,
-                                target_lat=args.target_lat,
-                                context_apothem=args.context_apothem,
-                                debug=args.debug
-                                )
-    print("Train dataset created")
+    # Check that the target features are in the feature variables
+    for feat in args.target_feats:
+        assert feat in feature_variables, f'{feat} is not a valid feature'
 
-    val_tsds = get_ts_dataset(val_data,
-                              TARGET_FEATS,
-                              context_steps=args.context_steps,
-                              target_steps=args.target_steps,
-                              target_lon=args.target_lon,
-                              target_lat=args.target_lat,
-                              context_apothem=args.context_apothem,
-                              debug=args.debug
-                              )
-    
-    print("Validation dataset created")
+    # Create the datasets from window iter ds
+    train_data = WindowIterDS(train_data,
+                              args.context_steps,
+                              args.horizon,
+                              args.target_feats)
 
-    # Data loaders
-    train_loader = DataLoader(train_tsds,
+    val_data = WindowIterDS(val_data,
+                            args.context_steps,
+                            args.horizon,
+                            args.target_feats)
+
+    test_data = WindowIterDS(test_data,
+                             args.context_steps,
+                             args.horizon,
+                             args.target_feats)
+
+    # Create the model config
+    config = ModelConfig(train_data)
+
+    print("Data loaded, creating dataloaders...")
+
+    # Data loaders Training data can't have multiple workers or it will crash most likely due to its size
+    train_loader = DataLoader(train_data,
                               batch_size=args.batch_size,
                               shuffle=True,
-                              num_workers=4)
-    val_loader = DataLoader(val_tsds,
+                              num_workers=0)
+
+    val_loader = DataLoader(val_data,
                             batch_size=args.batch_size,
                             shuffle=False,
-                            num_workers=4)
+                            num_workers=args.max_workers)
 
-    # Get batch dimensions
-    batch = next(iter(train_loader))
-    batch_dims = batch[0].shape
+    test_loader = DataLoader(test_data,
+                             batch_size=args.batch_size,
+                             shuffle=False,
+                             num_workers=args.max_workers)
 
-    print(f'Batch dimensions: {batch_dims}')
-    print(f'Input channels: {batch_dims[2]}')
+    return train_loader, val_loader, test_loader, config
 
-    config = ModelConfig(
-        feature_variables,
-        TARGET_FEATS,
-        model_type=args.model_type,
-        context_apothem=args.context_apothem,
-        context_steps=args.context_steps,
-        target_apothem=args.target_apothem,
-        target_steps=args.target_steps,
-        input_chans=batch_dims[2],
-    )
+
+if __name__ == '__main__':
+    args = get_args()
+
+    # Set up the data loaders and model config
+    train_loader, val_loader, test_loader, train_data = setup_loaders_config(args)
 
     # Create the model
-    model = LightningModel(args.learning_rate)
+    model = LightningModel('conv_lstm', 0.2, (3, 3),
+                           train_data, args.learning_rate)
+    print(model.model.summarize("full"))
+    print(model.model.hparams)
 
     # Create the callbacks
     early_stop_callback = EarlyStopping(monitor='val_loss',
