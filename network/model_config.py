@@ -13,6 +13,7 @@ class ModelConfig:
     def __init__(self, ds: WindowIterDS,
                  model_type: str = 'conv_lstm',
                  down_sample_channels: int = 256,
+                 lstm_channels: int = 256,
                  kernel_size: Union[int, tuple[int, int]] = (3, 3)):
         assert len(ds) > 0, 'Dataset must not be empty'
 
@@ -23,6 +24,7 @@ class ModelConfig:
 
         self.model_type = model_type
         self.down_sample_channels = down_sample_channels
+        self.lstm_channels = lstm_channels
         self.kernel_size = kernel_size
 
         sample_features, sample_labels = ds[0]

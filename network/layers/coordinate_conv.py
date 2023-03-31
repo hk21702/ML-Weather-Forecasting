@@ -10,11 +10,11 @@ import torch.nn as nn
 class CoordinateConv(nn.Module):
     """Convolutional Layer with added coordinates as input"""
 
-    def __init__(self, inputs: int, outputs: int, **kwargs) -> None:
+    def __init__(self, inputs: int, outputs: int, kernel_size, ** kwargs) -> None:
         super(CoordinateConv, self).__init__()
 
         self.implementcoords = ImplementCoords()
-        self.conv = nn.Conv2d(inputs + 2, outputs, **kwargs)
+        self.conv = nn.Conv2d(inputs + 2, outputs, kernel_size, **kwargs)
 
     def forward(self, x):
         x = self.implementcoords(x)

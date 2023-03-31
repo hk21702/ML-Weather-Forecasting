@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 
-from network.conv_lstm_model import ConvLSTMModel
+from network.models.conv_lstm_model import ConvLSTMModel
 from network.model_config import ModelConfig
 from network.window_iter_ds import WindowIterDS
 from args_setup import setup_train_args
@@ -120,17 +120,14 @@ def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoad
     # Data loaders Training data can't have multiple workers or it will crash most likely due to its size
     train_loader = DataLoader(train_data,
                               batch_size=args.batch_size,
-                              shuffle=True,
                               num_workers=0)
 
     val_loader = DataLoader(val_data,
                             batch_size=args.batch_size,
-                            shuffle=False,
                             num_workers=args.max_workers)
 
     test_loader = DataLoader(test_data,
                              batch_size=args.batch_size,
-                             shuffle=False,
                              num_workers=args.max_workers)
 
     return train_loader, val_loader, test_loader, config
@@ -140,12 +137,12 @@ if __name__ == '__main__':
     args = get_args()
 
     # Set up the data loaders and model config
-    train_loader, val_loader, test_loader, train_data = setup_loaders_config(
+    train_loader, val_loader, test_loader, config = setup_loaders_config(
         args)
 
     # Create the model
-    model = LightningModel('conv_lstm', 0.2, (3, 3),
-                           train_data, args.learning_rate)
+    model = LightningModel('conv_lstm', 0.2, config,
+                           args.learning_rate)
     print(model.model.summarize("full"))
     print(model.model.hparams)
 

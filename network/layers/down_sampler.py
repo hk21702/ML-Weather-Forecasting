@@ -13,13 +13,13 @@ class DownSampler(nn.Module):
 
         self.module = nn.Sequential(
             CoordinateConv(inputs,
-                           160, padding=1),
+                           160, 3, padding=1),
             nn.MaxPool2d((2, 2), stride=2),
             nn.BatchNorm2d(160),
             CoordinateConv(160,
-                           outputs, padding=1),
+                           outputs, 3, padding=1),
             nn.BatchNorm2d(outputs),
-            CoordinateConv(outputs, outputs, padding=1),
+            CoordinateConv(outputs, outputs, 3, padding=1),
             nn.MaxPool2d((2, 2), stride=2),
         )
 

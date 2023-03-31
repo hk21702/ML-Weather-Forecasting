@@ -17,7 +17,7 @@ class ConvLSTMModel(nn.Module):
 
         self.model_config = model_config
 
-        self.hidden_dims = self.model_config.hidden_dims
+        self.hidden_dims = self.model_config.lstm_channels
         self.hidden_layers = self.model_config.hidden_layers
         self.kernel_size = self.model_config.kernel_size
 
