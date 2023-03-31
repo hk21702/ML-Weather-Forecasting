@@ -20,12 +20,13 @@ class Model(nn.Module):
         self.model_config = model_config
 
         self.hidden_dims = self.model_config.hidden_dims
+        self.hidden_layers = self.model_config.hidden_layers
         self.kernel_size = self.model_config.kernel_size
 
         self.input_channels = self.model_config.input_chans
         self.output_chans = self.model_config.output_chans
 
-        self.output_steps = self.model_config.target_steps
+        self.horizon = self.model_config.horizon
 
         self.encoder = DownSampler(self.input_channels, self.input_channels)
 
@@ -34,39 +35,43 @@ class Model(nn.Module):
                 input_dim=self.input_channels,
                 hidden_dim=self.hidden_dims,
                 kernel_size=self.kernel_size,
-                num_layers=self.model_config.context_steps,
+                num_layers=self.hidden_layers,
             )
+
+            self.drop = nn.Dropout(dropout)
         elif self.model_config.model_type == 'lstm':
             self.primary_layer = SimpleLSTM(
                 input_size=self.input_channels,
                 hidden_size=self.hidden_dims,
-                num_layers=self.model_config.context_steps,
+                num_layers=self.hidden_layers,
                 dropout=dropout
             )
+
+            self.drop = nn.Identity()
         elif self.model_config.model_type == 'gru':
             self.primary_layer = SimpleGRU(
                 input_size=self.input_channels,
                 hidden_size=self.hidden_dims,
-                num_layers=self.model_config.context_steps,
+                num_layers=self.hidden_layers,
                 dropout=dropout
             )
+
+            self.drop = nn.Identity()
         else:
             raise ValueError('Invalid model type')
 
-        self.ct = ConditionTime(self.output_steps)
-
-        self.drop = nn.Dropout(dropout)
+        self.ct = ConditionTime(self.horizon)
 
         self.head = nn.Conv2d(
             in_channels=self.hidden_dims,
-            out_channels=self.output_steps * self.output_chans,
+            out_channels=self.horizon * self.output_chans,
             kernel_size=self.kernel_size
         )
 
     def forward(self, x: torch.Tensor):
         res = []
 
-        for step in self.output_steps:
+        for step in self.horizon:
             x = self.encoder(x)
             x = self.ct(x, step)
             x = self.drop(x)

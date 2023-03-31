@@ -10,7 +10,7 @@ class WindowIterDS(IterableDataset):
     """
         Iterable dataset that produced sliding windows of data.
 
-        shape = (time, channels, latitude, longitude)
+        shape = (time, channels, width (latitude), height (longitude))
 
         Args:
             ds: Dataset to iterate over

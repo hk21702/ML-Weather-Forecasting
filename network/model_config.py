@@ -7,38 +7,13 @@ class ModelConfig:
     """Configuration for the model
 
     Attributes:
-        feature_variables (list[str]): The variables to use as features
-        target_variables (list[str]): The variables to use as targets
-        context_apothem (int): The apothem of the context cube
-        context_steps (int): The number of time steps to look back in the context
-        target_apothem (int): The apothem of the target cube
-        target_steps (int): The number of time steps to predict into the future
-        input_size (int): The size of the input to the model
-        model_type (str): The type of model to use
-        down_sample_channels (int): The number of channels to downsample to
-        hidden_dims (int): The number of hidden dimensions
-        kernel_size (Union(int, tuple[int, int])): The kernel size to use
+
     """
-    feature_variables: list[str]
-    target_variables: list[str]
 
-    context_apothem: int = 12
-    context_steps: int = 6
-
-    target_apothem: int = 6
-    target_steps: int = 3
-
-    input_size: int = 128
-
-    model_type: str = 'conv_lstm'
-    down_sample_channels: int = 256
-    hidden_dims: int = 256
-
-    input_chans: int = 20
-
-    kernel_size: Union[int, tuple[int, int]] = (3, 3)
-
-    def __init__(self, ds: WindowIterDS):
+    def __init__(self, ds: WindowIterDS,
+                 model_type: str = 'conv_lstm',
+                 down_sample_channels: int = 256,
+                 kernel_size: Union[int, tuple[int, int]] = (3, 3)):
         assert len(ds) > 0, 'Dataset must not be empty'
 
         self.context_size: int = ds.context_steps
@@ -46,25 +21,46 @@ class ModelConfig:
         self.window_size: int = ds.window_size
         self.targets = ds.targets
 
+        self.model_type = model_type
+        self.down_sample_channels = down_sample_channels
+        self.kernel_size = kernel_size
+
         sample_features, sample_labels = ds[0]
 
-        self.input_chans = sample_features.shape[0]
+        # Check features
+        self._feature_shape(sample_features)
+
+        # Check labels
+        self._label_shape(sample_labels)
+
+    def _feature_shape(self, sample_features):
+        time, channels, width, height = sample_features.shape
+
+        self.input_chans = channels
+        self.context_steps = time
+        self.hidden_layers = time
+        self.feature_apothem = int(width - 1 // 2)
+
+        assert self.input_chans == channels, 'Expected input channels to be ' \
+            f'{self.input_chans}, instead was {channels}'
+
+        assert width == height, 'Expected square input, instead was ' \
+            f'{width}x{height}'
+
+    def _label_shape(self, sample_labels):
+        time, channels, width, height = sample_labels.shape
+
+        self.output_chans = channels
+        self.target_apothem = int(width - 1 // 2)
+        self.horizon = time
+
+        assert self.output_chans == channels, 'Expected output channels to be ' \
+            f'{self.output_chans}, instead was {channels}'
+
+        assert width == height, 'Expected label square input, instead was ' \
+            f'{width}x{height}'
 
     def __post_init__(self):
-        self.total_steps = self.context_steps + self.target_steps
-
-        self.output_chans = len(self.target_variables)
-
-        self.target_dim = self.target_apothem * 2 + 1
-        self.context_dim = self.context_apothem * 2 + 1
-
         # Check values
         assert self.model_type in ['conv_lstm', 'lstm', 'gru'], \
             f'Unknown model type {self.model_type}'
-
-        assert self.input_chans < self.input_size, \
-            f'Input size must be greater than the number of input channels'
-
-        if self.model_type in ['lstm', 'gru']:
-            assert self.context_dim == 1, \
-                f'Context dim must be 1 for {self.model_type} model'
