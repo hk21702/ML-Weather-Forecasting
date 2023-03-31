@@ -26,7 +26,7 @@ class ConditionTime(nn.Module):
 
     def c_time(self, x: torch.Tensor, i: int, size: tuple[int, int]):
         # Create the time coordinates
-        times = torch.eye(self.seq_len_hor, x.dtype, x.device)[i]
-        times = times.unsequeeze(-1).unsequeeze(-1)
-        ones = torch.ones(1, *size, x.dtype, x.device)
+        times = torch.eye(self.seq_len_hor, dtype=x.dtype, device=x.device)[i]
+        times = times.unsqueeze(-1).unsqueeze(-1)
+        ones = torch.ones(1, *size, dtype=x.dtype, device=x.device)
         return times * ones
