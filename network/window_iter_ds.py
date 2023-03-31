@@ -10,6 +10,8 @@ class WindowIterDS(IterableDataset):
     """
         Iterable dataset that produced sliding windows of data.
 
+        shape = (time, channels, latitude, longitude)
+
         Args:
             ds: Dataset to iterate over
             context_steps: Number of time steps to use as context
@@ -51,6 +53,10 @@ class WindowIterDS(IterableDataset):
         features = features.to_array('channels')
         labels = labels.to_array('channels')
 
+        # To numpy
+        features = features.transpose(
+            'time', 'channels', 'latitude', 'longitude')
+        labels = labels.transpose('time', 'channels', 'latitude', 'longitude')
         return features.to_numpy(), labels.to_numpy()
 
     def __iter__(self):
