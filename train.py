@@ -120,6 +120,13 @@ def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoad
     # Create the model config
     config = ModelConfig(train_data)
 
+    if args.debug:
+        print("Configuration:")
+        print(f'\tInput Channels: {config.input_chans}')
+        print(f'\tOutput Channels: {config.output_chans}')
+        print(f'\tHidden Layers: {config.hidden_layers}')
+        print(f'\tLSTM Channels: {config.lstm_chans}')
+
     print("Data loaded, creating dataloaders...")
 
     # Data loaders Training data can't have multiple workers or it will crash most likely due to its size
