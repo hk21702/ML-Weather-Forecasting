@@ -10,6 +10,8 @@ class SimpleGRU(nn.Module):
         super(SimpleGRU, self).__init__()
         self.gru = nn.GRU(input_size, hidden_size, num_layers, dropout=dropout)
 
+        self.hidden_size = hidden_size
+
     def forward(self, x):
         return self.gru(x)
 

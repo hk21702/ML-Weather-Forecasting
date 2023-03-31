@@ -4,8 +4,6 @@ from torch import nn
 from network.layers.condition_time import ConditionTime
 from network.layers.conv_lstm import ConvLSTM
 from network.layers.down_sampler import DownSampler
-from network.layers.simple_gru import SimpleGRU
-from network.layers.simple_lstm import SimpleLSTM
 from network.model_config import ModelConfig
 
 
