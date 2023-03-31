@@ -30,35 +30,14 @@ class ConvLSTMModel(nn.Module):
 
         self.encoder = DownSampler(self.input_channels, self.input_channels)
 
-        if self.model_config.model_type == 'conv_lstm':
-            self.primary_layer = ConvLSTM(
-                input_dim=self.input_channels,
-                hidden_dim=self.hidden_dims,
-                kernel_size=self.kernel_size,
-                num_layers=self.hidden_layers,
-            )
+        self.primary_layer = ConvLSTM(
+            input_dim=self.input_channels,
+            hidden_dim=self.hidden_dims,
+            kernel_size=self.kernel_size,
+            num_layers=self.hidden_layers,
+        )
 
-            self.drop = nn.Dropout(dropout)
-        elif self.model_config.model_type == 'lstm':
-            self.primary_layer = SimpleLSTM(
-                input_size=self.input_channels,
-                hidden_size=self.hidden_dims,
-                num_layers=self.hidden_layers,
-                dropout=dropout
-            )
-
-            self.drop = nn.Identity()
-        elif self.model_config.model_type == 'gru':
-            self.primary_layer = SimpleGRU(
-                input_size=self.input_channels,
-                hidden_size=self.hidden_dims,
-                num_layers=self.hidden_layers,
-                dropout=dropout
-            )
-
-            self.drop = nn.Identity()
-        else:
-            raise ValueError('Invalid model type')
+        self.drop = nn.Dropout(dropout)
 
         self.ct = ConditionTime(self.horizon)
 
