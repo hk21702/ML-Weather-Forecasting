@@ -20,7 +20,7 @@ class WindowIterDS(IterableDataset):
     """
 
     def __init__(self, ds: xr.Dataset, context_steps: int, horizon: int, targets: list[str],
-                 steps: int = 1):
+                 device: str, steps: int = 1):
         super(WindowIterDS).__init__()
 
         self.context_steps = context_steps
@@ -28,6 +28,7 @@ class WindowIterDS(IterableDataset):
         self.window_size = context_steps + horizon
         self.steps = steps
         self.targets = targets
+        self.device = device
 
         lat_size = len(ds.latitude)
         long_size = len(ds.longitude)
@@ -57,7 +58,10 @@ class WindowIterDS(IterableDataset):
         features = features.transpose(
             'time', 'channels', 'latitude', 'longitude')
         labels = labels.transpose('time', 'channels', 'latitude', 'longitude')
-        return features.to_numpy(), labels.to_numpy()
+
+        features = torch.from_numpy(features.to_numpy()).to(self.device, dtype=torch.float)
+        labels = torch.from_numpy(labels.to_numpy()).to(self.device, dtype=torch.float)
+        return features, labels
 
     def __iter__(self):
         """for sample in self.bgen:
