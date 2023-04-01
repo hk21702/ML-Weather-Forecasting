@@ -15,7 +15,6 @@ class ModelConfig:
                  down_sample_channels: int = 256,
                  lstm_chans: int = 256,
                  kernel_size: Union[int, tuple[int, int]] = (3, 3)):
-        assert len(ds) > 0, 'Dataset must not be empty'
 
         self.context_size: int = ds.context_steps
         self.horizon: int = ds.horizon
