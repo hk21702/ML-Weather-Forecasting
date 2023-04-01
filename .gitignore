@@ -132,3 +132,4 @@ cache/
 .vscode
 tmp/
 logs/
+wandb

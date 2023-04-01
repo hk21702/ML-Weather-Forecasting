@@ -106,3 +106,12 @@ class WindowIterDS(IterableDataset):
 
     def __getitem__(self, index):
         return self._get_xy(self.bgen[index])
+
+    def __len__(self):
+        if torch.utils.data.get_worker_info() is None:
+            return len(self.bgen)
+
+        worker_total_num = torch.utils.data.get_worker_info().num_workers
+        worker_id = torch.utils.data.get_worker_info().id
+
+        return (len(self.bgen) - worker_id) // worker_total_num

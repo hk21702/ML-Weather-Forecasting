@@ -8,20 +8,14 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--epochs',
         type=int,
-        default=4,
-        help='Number of epochs to train the model for')
+        default=10,
+        help='Max number of epochs to train the model for')
 
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=32,
-        help='Batch size to use when training the model')
-
-    parser.add_argument(
-        '--learning_rate',
-        type=float,
-        default=0.001,
-        help='Initial learning rate to use when training the model')
+        default=128,
+        help='Batch size to use when training the model. Default: 128')
 
     choices = ['conv_lstm', 'lstm', 'gru']
 
@@ -33,14 +27,6 @@ def setup_train_args() -> argparse.ArgumentParser:
         help=f'Model type to use. Note that non,\
             Convoluted LSTM models can only handle single point outputs. \
                 Default: conv_lstm. Choices: {choices}')
-
-    # Max number of workers
-    parser.add_argument(
-        '--max_workers',
-        type=int,
-        default=4,
-        help='Max number of workers to use when loading the data. \
-            Note that memory requirements is a factor of this number. Default: 4, min 0')
 
     parser.add_argument(
         '--train_path',
@@ -97,10 +83,10 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--context_steps',
         type=int,
-        default=6,
+        default=16,
         help='Context time steps (hours) used for input')
 
-    # Prediction delta
+    # Horizon
     parser.add_argument(
         '--horizon',
         type=int,
@@ -116,5 +102,12 @@ def setup_train_args() -> argparse.ArgumentParser:
     # Target features
     parser.add_argument('-tf', '--target_feats',
                         nargs='+', default=['t2m', 'tp'])
+
+    # Initial learning rate
+    parser.add_argument(
+        '--learning_rate',
+        type=float,
+        default=1e-3,
+        help='Initial learning rate for the model')
 
     return parser
