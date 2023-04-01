@@ -1,7 +1,9 @@
 import torch
 from torch import nn
+from axial_attention import AxialAttention, AxialPositionalEmbedding
 
 from network.layers.condition_time import ConditionTime
+from network.layers.distribute_time import DistributeTime
 from network.layers.conv_lstm import ConvLSTM
 from network.layers.down_sampler import DownSampler
 from network.model_config import ModelConfig
@@ -17,7 +19,7 @@ class ConvLSTMModel(nn.Module):
 
         self.model_config = model_config
 
-        self.hidden_dims = self.model_config.lstm_channels
+        self.hidden_dims = self.model_config.lstm_chans
         self.hidden_layers = self.model_config.hidden_layers
         self.kernel_size = self.model_config.kernel_size
 
@@ -26,12 +28,18 @@ class ConvLSTMModel(nn.Module):
 
         self.horizon = self.model_config.horizon
 
-        self.encoder = DownSampler(self.input_channels, self.input_channels)
+        self.encoder = DistributeTime(DownSampler(
+            self.input_channels + self.horizon, self.input_channels))
+
+        if isinstance(self.kernel_size, tuple):
+            conv_lstm_ksize = self.kernel_size[0]
+        else:
+            conv_lstm_ksize = self.kernel_size
 
         self.primary_layer = ConvLSTM(
             input_dim=self.input_channels,
             hidden_dim=self.hidden_dims,
-            kernel_size=self.kernel_size,
+            kernel_size=conv_lstm_ksize,
             num_layers=self.hidden_layers,
         )
 
@@ -39,24 +47,37 @@ class ConvLSTMModel(nn.Module):
 
         self.ct = ConditionTime(self.horizon)
 
-        self.head = nn.Conv2d(
-            in_channels=self.hidden_dims,
-            out_channels=self.horizon * self.output_chans,
-            kernel_size=self.kernel_size
+        shape = self.model_config.target_width
+
+        self.axial_pos_emb = AxialPositionalEmbedding(
+            dim=self.hidden_dims,
+            shape=(shape, shape),
         )
 
-    def forward(self, x: torch.Tensor):
-        res = []
+        self.agg_attention = nn.Sequential(
+            *[
+                AxialAttention(dim=self.hidden_dims, dim_index=1)
+                for _ in range(2)
+            ]
+        )
 
-        for step in self.horizon:
-            x = self.encoder(x)
-            x = self.ct(x, step)
-            x = self.drop(x)
-            res, _ = self.primary_layer(x)
+        self.head = nn.Conv2d(
+            in_channels=self.hidden_dims,
+            out_channels=self.output_chans,
+            kernel_size=(1, 1)
+        )
 
-            res = self.head(res)
+    def forward(self, x: torch.Tensor, step: int):
+        x = self.ct(x, step)
 
-            res.append(res)
+        x = self.encoder(x)
+        x = self.drop(x)
 
-        res = torch.stack(res, dim=1).squeeze()
+        _, state = self.primary_layer(x)
+
+        # Use the last state
+        emb = self.axial_pos_emb(state[-1][0])
+        x_i = self.agg_attention(emb)
+
+        res = self.head(x_i)
         return res

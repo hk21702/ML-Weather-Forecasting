@@ -2,6 +2,7 @@
 import argparse
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 import pytorch_lightning as pl
@@ -40,6 +41,8 @@ class LightningModel(pl.LightningModule):
                  learning_rate: float = 0.001):
         super().__init__()
 
+        self.horizon = config.horizon
+
         if model_type == 'conv_lstm':
             self.model = ConvLSTMModel(dropout,
                                        config)
@@ -49,21 +52,48 @@ class LightningModel(pl.LightningModule):
 
         self.learning_rate = learning_rate
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
+    def forward(self, x: torch.Tensor, step: int) -> torch.Tensor:
+        return self.model(x, step)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self(x)
-        loss = F.mse_loss(y_hat, y)
+        # Pick first forecast step
+        forecast_step = np.random.randint(1, self.horizon)
+        y_hat = self(x, forecast_step)
+        loss = F.mse_loss(y_hat,
+                          y[:, forecast_step, :])
+
+        count = 1
+
+        for step in range(forecast_step, self.horizon):
+            y_hat = self(x, torch.tensor(step).long())
+            loss += F.mse_loss(y_hat,
+                               y[:, step, :])
+            count += 1
+
+        loss /= count
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self(x)
-        loss = F.mse_loss(y_hat, y)
+        # Pick first forecast step
+        forecast_step = np.random.randint(1, self.horizon)
+        y_hat = self(x, forecast_step)
+        loss = F.mse_loss(y_hat,
+                          y[:, forecast_step, :])
+
+        count = 1
+
+        for step in range(forecast_step, self.horizon):
+            y_hat = self(x, torch.tensor(step).long())
+            loss += F.mse_loss(y_hat,
+                               y[:, step, :])
+            count += 1
+
+        loss /= count
         self.log('val_loss', loss)
+        return loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -170,9 +200,9 @@ if __name__ == '__main__':
 
     # Create the trainer
     trainer = pl.Trainer(
-                         max_epochs=args.epochs,
-                         callbacks=[early_stop_callback, checkpoint_callback],
-                         logger=pl.loggers.TensorBoardLogger(args.log_dir))
+        max_epochs=args.epochs,
+        callbacks=[early_stop_callback, checkpoint_callback],
+        logger=pl.loggers.TensorBoardLogger(args.log_dir))
 
     # Train the model
     trainer.fit(model, train_loader, val_loader)

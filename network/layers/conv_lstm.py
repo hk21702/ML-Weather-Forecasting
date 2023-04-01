@@ -6,7 +6,7 @@ Heavy influcence from https://github.com/ndrplz/ConvLSTM_pytorch (MIT License)
 """
 from typing import Optional
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class ConvLSTMCell(nn.Module):
@@ -26,14 +26,14 @@ class ConvLSTMCell(nn.Module):
             bias (bool): Whether to use bias in the convolution
         """
 
-        super(ConvLSTMCell, self).__init__()
+        super().__init__()
 
         self.input_dims = input_dims
         self.hidden_dims = hidden_dims
         self.k_size = k_size
         self.bias = bias
 
-        self.padding = (k_size[0] // 2, k_size[1] // 2)
+        self.padding = (k_size // 2, k_size // 2)
 
         self.conv = nn.Conv2d(
             in_channels=self.input_dims + self.hidden_dims,
@@ -60,17 +60,22 @@ class ConvLSTMCell(nn.Module):
 
         return h_next, c_next
 
-    def init_hidden(self, batch_size: int, image_size: tuple[int, int]) -> tuple():
+    def init_hidden(self, x: torch.Tensor) -> tuple():
         """
         Inits the hidden state of the LSTM.
 
         Args:
-            batch_size (int): Batch size
-            image_size (tuple[int, int]): Size of the image like data
+            x (torch.Tensor): Input tensor (batch_size, time, input_chans, height, width)
         """
-        height, width = image_size
+        batch_size, _, _, height, width = x.size()
         return (torch.zeros(batch_size, self.hidden_dims, height, width, device=self.conv.weight.device),
                 torch.zeros(batch_size, self.hidden_dims, height, width, device=self.conv.weight.device))
+
+    def reset_parameters(self) -> None:
+        """Resets parameters"""
+        nn.init.xavier_uniform_(
+            self.conv.weight, gain=nn.init.calculate_gain("selu"))
+        self.conv.bias.data.zero_()
 
 
 class ConvLSTM(nn.Module):
@@ -79,12 +84,10 @@ class ConvLSTM(nn.Module):
     """
 
     def __init__(self, input_dim: int, hidden_dim: int,
-                 kernel_size: tuple[int, int], num_layers: int,
+                 kernel_size: int, num_layers: int,
                  bias: bool = True,
                  return_all: bool = False) -> None:
-        super(ConvLSTM, self).__init__()
-
-        self._check_kernel_size_consistency(kernel_size)
+        super().__init__()
 
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
         hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
@@ -111,8 +114,11 @@ class ConvLSTM(nn.Module):
 
         self.cell_list = nn.ModuleList(cell_list)
 
+        for cell in self.cell_list:
+            cell.reset_parameters()
+
     def forward(self, input_tensor: torch.Tensor,
-                hidden_states: Optional[list]) -> tuple():
+                hidden_states: Optional[list] = None) -> tuple():
         c_layer_input = torch.unbind(input_tensor, dim=1)
 
         if not hidden_states:
@@ -144,28 +150,10 @@ class ConvLSTM(nn.Module):
         ]
 
     @staticmethod
-    def _check_kernel_size_consistency(kernel_size: tuple[int, int]) -> None:
-        """
-        Checks if the kernel size is consistent.
-        """
-        if not (
-            isinstance(kernel_size, tuple)
-            or isinstance(kernel_size, list)
-            and all(isinstance(k, int) for k in kernel_size)
-        ):
-            raise ValueError(
-                f"kernel_size must be a tuple or list of ints. Got {type(kernel_size)}")
-
-        if len(kernel_size) != 2:
-            raise ValueError(
-                f"kernel_size must be a tuple/list of length 2. Got {len(kernel_size)}"
-            )
-
-    @staticmethod
     def _extend_for_multilayer(param, num_layers: int) -> tuple[int, int]:
         """
         Extends the given param to a list with length num_layers.
         """
-        if not isinstance(param[0], list):
+        if not isinstance(param, list):
             param = [param] * num_layers
         return param

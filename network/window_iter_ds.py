@@ -54,19 +54,49 @@ class WindowIterDS(IterableDataset):
         features = features.to_array('channels')
         labels = labels.to_array('channels')
 
+        # Crop label width and height to be 4x smaller than context width and height,
+        # centered at same location
+        # Get current width and height
+        width = len(features.longitude)
+        height = len(features.latitude)
+
+        # Get center of width and height
+        center_width = width // 2
+        center_height = height // 2
+
+        # Get target width and height
+        target_width = width // 4
+        target_height = height // 4
+
+        # Get start and end of target width and height
+        start_width = center_width - target_width // 2
+        end_width = center_width + target_width // 2
+        start_height = center_height - target_height // 2
+        end_height = center_height + target_height // 2
+
+        # Crop
+        labels = labels.isel(
+            longitude=slice(start_width, end_width + 1),
+            latitude=slice(start_height, end_height + 1))
+
         # To numpy
         features = features.transpose(
             'time', 'channels', 'latitude', 'longitude')
         labels = labels.transpose('time', 'channels', 'latitude', 'longitude')
 
-        features = torch.from_numpy(features.to_numpy()).to(self.device, dtype=torch.float)
-        labels = torch.from_numpy(labels.to_numpy()).to(self.device, dtype=torch.float)
+        features = torch.from_numpy(features.to_numpy()).to(
+            self.device, dtype=torch.float)
+        labels = torch.from_numpy(labels.to_numpy()).to(
+            self.device, dtype=torch.float)
         return features, labels
 
     def __iter__(self):
         """for sample in self.bgen:
             # Get the input and labels
             yield self._get_xy(sample)"""
+        if torch.utils.data.get_worker_info() is None:
+            yield from map(self._get_xy, self.bgen)
+
         worker_total_num = torch.utils.data.get_worker_info().num_workers
         worker_id = torch.utils.data.get_worker_info().id
 
@@ -78,7 +108,3 @@ class WindowIterDS(IterableDataset):
 
     def __getitem__(self, index):
         return self._get_xy(self.bgen[index])
-
-    def __len__(self):
-        # Get number of windows
-        return len(self.bgen)

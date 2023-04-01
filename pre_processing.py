@@ -3,6 +3,7 @@ Preprocessing of raw data from the ERA5 dataset to a useable state.
 """
 
 import argparse
+import math
 import os
 
 import numpy as np
@@ -48,16 +49,16 @@ def get_args() -> argparse.Namespace:
                         help='Name of the training file')
 
     # Target longitude
-    parser.add_argument('--target_lon', type=float, default=-80,
+    parser.add_argument('--target_lon', type=float, default=-75,
                         help='Target longitude')
 
     # Target latitude
     parser.add_argument('--target_lat', type=float, default=43,
                         help='Target latitude')
 
-    # Context apothem
-    parser.add_argument('--context_apothem', type=float, default=3,
-                        help='Context apothem')
+    # Target apothem
+    parser.add_argument('--target_apothem', type=float, default=3,
+                        help='Target apothem in unit steps of 0.25 per (Context is 4 times larger)')
 
     return parser.parse_args()
 
@@ -66,7 +67,7 @@ def check_args(args: argparse.Namespace):
     """Checks the command line arguments"""
 
     # Apothem must be positive
-    assert args.context_apothem > 0, 'Context apothem must be positive'
+    assert args.target_apothem > 0, 'Context apothem must be positive'
 
     # Target longitude must be between -180 and 180
     assert -180 <= args.target_lon <= 180, 'Target longitude must be between -180 and 180'
@@ -266,9 +267,23 @@ def feature_engineering(dataset: xr.Dataset) -> xr.Dataset:
 def crop_area(dataset: xr.Dataset,
               target_lat: float,
               target_lon: float,
-              context_apothem: float,) -> xr.Dataset:
+              target_apothem: float,) -> xr.Dataset:
     """ Crop the dataset to the target area."""
     print("Cropping dataset...")
+
+    # Get the context apothem which results in 4x larger dimension size
+    target_width = (target_apothem * 2) + 1
+    context_width = target_width * 4
+    context_apothem = (context_width - 1) / 2
+
+    # Round down to integer
+    context_apothem = math.ceil(context_apothem)
+
+    # True apothem
+    context_apothem *= 0.25
+
+    print(
+        f'\tTarget center: {target_lat}, {target_lon} (Context apothem: {context_apothem})')
 
     # Get min and max lat and lon
     min_lat = target_lat - context_apothem
@@ -276,10 +291,19 @@ def crop_area(dataset: xr.Dataset,
     min_lon = target_lon - context_apothem
     max_lon = target_lon + context_apothem
 
+    print(f'\tAvailable dataset: Lat: {dataset.latitude.min().values}, {dataset.latitude.max().values}, \
+        Lon: {dataset.longitude.min().values}, {dataset.longitude.max().values}')
+
+    # Assert that new square is within the original dataset
+    assert max_lat >= dataset.latitude.min().values, 'Latitude min out of bounds'
+    assert min_lat <= dataset.latitude.max().values, 'Latitude max out of bounds'
+    assert min_lon >= dataset.longitude.min().values, 'Longitude min out of bounds'
+    assert max_lon <= dataset.longitude.max().values, 'Longitude max out of bounds'
+
     # Crop the dataset
     dataset = dataset.sel(latitude=slice(max_lat, min_lat),
                           longitude=slice(min_lon, max_lon))
-
+    
     return dataset
 
 
@@ -318,7 +342,7 @@ def main() -> None:
 
     # Crop the dataset to the target area
     dataset = crop_area(dataset, args.target_lat, args.target_lon,
-                        args.context_apothem)
+                        args.target_apothem)
 
     # Apply feature engineering
     dataset = feature_engineering(dataset)

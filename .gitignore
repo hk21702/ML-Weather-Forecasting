@@ -131,3 +131,4 @@ data/
 cache/
 .vscode
 tmp/
+logs/
