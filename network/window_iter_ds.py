@@ -95,16 +95,14 @@ class WindowIterDS(IterableDataset):
             # Get the input and labels
             yield self._get_xy(sample)"""
         if torch.utils.data.get_worker_info() is None:
-            yield from map(self._get_xy, self.bgen)
+            for i in range(len(self.bgen)):
+                yield self._get_xy(self.bgen[i])
+        else:
+            worker_total_num = torch.utils.data.get_worker_info().num_workers
+            worker_id = torch.utils.data.get_worker_info().id
 
-        worker_total_num = torch.utils.data.get_worker_info().num_workers
-        worker_id = torch.utils.data.get_worker_info().id
-
-        mapped_itr = map(self._get_xy, self.bgen)
-        mapped_itr = itertools.islice(
-            mapped_itr, worker_id, None, worker_total_num)
-
-        return mapped_itr
+            for i in range(worker_id, len(self.bgen), worker_total_num):
+                yield self._get_xy(self.bgen[i])
 
     def __getitem__(self, index):
         return self._get_xy(self.bgen[index])

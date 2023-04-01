@@ -1,6 +1,5 @@
 """Train a model on the data using given parameters"""
 import argparse
-from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -9,7 +8,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, LearningRateMonitor
 
 
 from network.models.conv_lstm_model import ConvLSTMModel
@@ -33,7 +32,7 @@ def get_args() -> argparse.Namespace:
     return args
 
 
-class LightningModel(pl.LightningModule):
+class LitModel(pl.LightningModule):
     def __init__(self,
                  model_type: str,
                  dropout: float,
@@ -96,7 +95,7 @@ class LightningModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return torch.optim.Adam(self.parameters(), lr=(self.learning_rate or self.lr))
 
 
 def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoader, DataLoader, ModelConfig]:
@@ -126,7 +125,8 @@ def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoad
     for feat in args.target_feats:
         assert feat in feature_variables, f'{feat} is not a valid feature'
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cpu") if not torch.cuda.is_available() else torch.device("cuda:0")
 
     # Create the datasets from window iter ds
     train_data = WindowIterDS(train_data,
@@ -162,7 +162,7 @@ def setup_loaders_config(args: argparse.Namespace) -> tuple[DataLoader, DataLoad
     # Data loaders Training data can't have multiple workers or it will crash most likely due to its size
     train_loader = DataLoader(train_data,
                               batch_size=args.batch_size,
-                              num_workers=0)
+                              num_workers=args.max_workers)
 
     val_loader = DataLoader(val_data,
                             batch_size=args.batch_size,
@@ -183,8 +183,8 @@ if __name__ == '__main__':
         args)
 
     # Create the model
-    model = LightningModel('conv_lstm', 0.2, config,
-                           args.learning_rate)
+    model = LitModel('conv_lstm', 0.2, config,
+                     args.learning_rate)
 
     # Create the callbacks
     early_stop_callback = EarlyStopping(monitor='val_loss',
@@ -198,11 +198,16 @@ if __name__ == '__main__':
                                           save_top_k=1,
                                           mode='min')
 
+    learning_rate_monitor = LearningRateMonitor(logging_interval='step')
+
     # Create the trainer
     trainer = pl.Trainer(
         max_epochs=args.epochs,
-        callbacks=[early_stop_callback, checkpoint_callback],
-        logger=pl.loggers.TensorBoardLogger(args.log_dir))
+        callbacks=[early_stop_callback,
+                   checkpoint_callback, learning_rate_monitor],
+        auto_lr_find=True,
+        logger=pl.loggers.TensorBoardLogger(args.log_dir),
+        accelerator='auto')
 
     # Train the model
     trainer.fit(model, train_loader, val_loader)
@@ -211,7 +216,7 @@ if __name__ == '__main__':
     trainer.save_checkpoint(f'{args.model_dir}/{args.model_name}.ckpt')
 
     # Test the model
-    trainer.test()
+    trainer.test(test_loader)
 
     # Save the model config
     model.config.save(args.model_dir)
