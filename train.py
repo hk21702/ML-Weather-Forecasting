@@ -120,7 +120,7 @@ def fit(max_epochs: int, model: nn.Module, optimizer: torch.optim, train_loader,
         scheduler: torch.optim.lr_scheduler, device: torch.device):
     model = model.to(device)
 
-    early_stopping = EarlyStopping(tolerance=5)
+    early_stopping = EarlyStopping(tolerance=wandb.config.early_stop_tolerance)
 
     pbar = tqdm.tqdm(range(max_epochs), desc='Epoch', position=0)
     for epoch in pbar:
@@ -130,12 +130,15 @@ def fit(max_epochs: int, model: nn.Module, optimizer: torch.optim, train_loader,
             model, val_loader, loss_fn)
 
         pbar.set_postfix({'Prev Val Loss': val_mloss, 'Prev Val R2': val_r2})
-        wandb.log({'Epoch Loss/val': val_mloss, 'Epoch R2/val': val_r2, 'Epoch Loss/train': train_mloss,
-                   'Epoch R2/train': train_r2, 'epoch': epoch})
+        wandb.log({'epoch val-loss': val_mloss, 'epoch val-r2': val_r2,
+                   'epoch train-loss': train_mloss, 'epoch train-r2': train_r2,
+                   'epoch': epoch})
+        lr = optimizer.param_groups[0]['lr']
+        wandb.log({'learning rate': lr})
 
         if early_stopping(val_mloss):
             # Log early stopping as event
-            wandb.log({'Early Stopping': True})
+            print(f"Early stopped at epoch {epoch}")
             break
 
         scheduler.step(val_mloss)
@@ -174,8 +177,8 @@ def training_loop(model: nn.Module, optimizer: torch.optim, train_loader, loss_f
         r2s.append(r2.item())
 
         if batch_idx % 50 == 0:
-            wandb.log({'Loss/train': np.mean(losses)})
-            wandb.log({'R2/train': np.mean(r2s)})
+            wandb.log({'train-loss': np.mean(losses)})
+            wandb.log({'train-r2': np.mean(r2s)})
 
         pbar.set_postfix({'Loss': np.mean(losses), 'R2': np.mean(r2s)})
 
@@ -222,7 +225,8 @@ def validation_loop(model: nn.Module, val_loader, loss_fn):
         r2s.append(r2.item())
 
         if batch_idx % 50 == 0:
-            wandb.log({'Loss/val': np.mean(losses), })
+            wandb.log({'val-loss': np.mean(losses), })
+            wandb.log({'val-r2': np.mean(r2s)})
 
         pbar.set_postfix({'Loss': np.mean(losses), 'R2': np.mean(r2s)})
 
@@ -268,8 +272,8 @@ def test(model: nn.Module, test_loader, loss_fn, device: torch.device):
 
     test_mloss = np.mean(losses)
     test_r2 = np.mean(r2s)
-    wandb.log({'Loss/test': test_mloss})
-    wandb.log({'R2/test': test_r2})
+    wandb.log({'test-loss': test_mloss})
+    wandb.log({'test-r2': test_r2})
 
     # Print the test loss
     print(f'Test Loss: {test_mloss:.4f}')
@@ -285,7 +289,8 @@ def main(args: argparse.Namespace):
     # Create the model
     if args.model_type == 'conv_lstm':
         model = ConvLSTMModel(0.7,
-                              config)
+                              config,
+                              wandb.config)
     else:
         raise NotImplementedError(
             f'{args.model_type} is not a valid model type')
@@ -293,7 +298,7 @@ def main(args: argparse.Namespace):
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                              patience=3,
+                                                              patience=2,
                                                               verbose=True)
 
     wandb.watch(model, criterion=loss_fn, log='all', log_freq=100)
@@ -329,6 +334,12 @@ def main(args: argparse.Namespace):
 if __name__ == '__main__':
     args = get_args()
 
-    wandb.init(project='weather-prediction', config=args)
+    run = wandb.init(project='weather-prediction', config=args)
+    run.define_metric('epoch', hidden=True)
+    run.define_metric('epoch val-loss', step_metric='epoch')
+    run.define_metric('epoch val-r2', step_metric='epoch')
+    run.define_metric('epoch train-loss', step_metric='epoch')
+    run.define_metric('epoch train-r2', step_metric='epoch')
+    run.define_metric('learning rate', step_metric='epoch')
 
     main(args)

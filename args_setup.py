@@ -14,20 +14,29 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=64,
-        help='Batch size to use when training the model. Try to keep it as a power of '\
-            '2 for better results. Default: 64')
+        default=32,
+        help='Batch size to use when training the model. Try to keep it as a power of '
+        '2 for better results. Default: 32')
 
-    choices = ['conv_lstm', 'lstm', 'gru']
+    choices = ['conv_lstm', 'conv_gru', 'conv3d']
 
     parser.add_argument(
         '--model_type',
         type=str,
         choices=choices,
         default='conv_lstm',
-        help=f'Model type to use. Note that non,\
-            Convoluted LSTM models can only handle single point outputs. \
+        help=f'Model type to use. Note that non conv3d is single shot\
                 Default: conv_lstm. Choices: {choices}')
+
+    # Activation functions
+    choices = ['relu', 'selu', 'tanh']
+
+    parser.add_argument(
+        '--activation_fn',
+        type=str,
+        choices=choices,
+        default='selu',
+        help=f'Activation function to use. Default: relu. Choices: {choices}')
 
     parser.add_argument(
         '--train_path',
@@ -84,7 +93,7 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--context_steps',
         type=int,
-        default=12,
+        default=10,
         help='Context time steps (hours) used for input')
 
     # Horizon
@@ -108,7 +117,21 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--learning_rate',
         type=float,
-        default=1e-3,
-        help='Initial learning rate for the model')
+        default=1e-4,
+        help='Initial learning rate for the model, Default 1e-4')
+
+    # Learning rate patience
+    parser.add_argument(
+        '--lr_patience',
+        type=int,
+        default=2,
+        help='Number of epochs to wait before reducing learning rate on plateu, Default 2')
+
+    # Early stop tolerance
+    parser.add_argument(
+        '--early_stop_tolerance',
+        type=int,
+        default=5,
+        help='Number of epochs to wait before early stopping, Default 5')
 
     return parser

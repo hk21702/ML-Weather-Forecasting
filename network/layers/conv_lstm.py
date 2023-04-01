@@ -15,7 +15,8 @@ class ConvLSTMCell(nn.Module):
     """
 
     def __init__(self, input_dims: int, hidden_dims: int,
-                 k_size: tuple[int, int], bias: bool) -> None:
+                 k_size: tuple[int, int], bias: bool = True,
+                 activation_fn: nn.Module = torch.tanh) -> None:
         """
         Init conv LSTM cell.
 
@@ -24,6 +25,7 @@ class ConvLSTMCell(nn.Module):
             hidden_dims (int): Number of channels of the hidden state
             k_size (tuple[int, int]): Kernel size of the convolution
             bias (bool): Whether to use bias in the convolution
+            activation_fn (torch.nn.Module): Activation function to use
         """
 
         super().__init__()
@@ -32,6 +34,7 @@ class ConvLSTMCell(nn.Module):
         self.hidden_dims = hidden_dims
         self.k_size = k_size
         self.bias = bias
+        self.activation_fn = activation_fn
 
         self.padding = (k_size // 2, k_size // 2)
 
@@ -53,10 +56,10 @@ class ConvLSTMCell(nn.Module):
         i = torch.sigmoid(i)
         f = torch.sigmoid(f)
         o = torch.sigmoid(o)
-        g = torch.tanh(g)
+        g = self.activation_fn(g)
 
         c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
+        h_next = o * self.activation_fn(c_next)
 
         return h_next, c_next
 
@@ -74,7 +77,7 @@ class ConvLSTMCell(nn.Module):
     def reset_parameters(self) -> None:
         """Resets parameters"""
         nn.init.xavier_uniform_(
-            self.conv.weight, gain=nn.init.calculate_gain("selu"))
+            self.conv.weight, gain=nn.init.calculate_gain("relu"))
         self.conv.bias.data.zero_()
 
 
@@ -86,11 +89,13 @@ class ConvLSTM(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int,
                  kernel_size: int, num_layers: int,
                  bias: bool = True,
-                 return_all: bool = False) -> None:
+                 activation_fn: nn.Module = torch.tanh) -> None:
         super().__init__()
-
+        # Create multiple instances of activation functions as some
+        # may be trainable!!!!
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
         hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
+        activation = self._extend_for_multilayer(activation_fn, num_layers)
         if not len(hidden_dim) == len(kernel_size) == num_layers:
             raise ValueError("Inconsistent list length.")
 
@@ -100,7 +105,6 @@ class ConvLSTM(nn.Module):
         self.num_layers = num_layers
         self.batch_first = True
         self.bias = bias
-        self.return_all = return_all
 
         # Create cell list
         cell_list = []
@@ -110,7 +114,8 @@ class ConvLSTM(nn.Module):
             cell_list.append(ConvLSTMCell(input_dims=c_input_dim,
                                           hidden_dims=self.hidden_dim[i],
                                           k_size=self.kernel_size[i],
-                                          bias=self.bias))
+                                          bias=self.bias,
+                                          activation_fn=activation[i]))
 
         self.cell_list = nn.ModuleList(cell_list)
 
