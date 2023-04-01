@@ -130,8 +130,8 @@ def fit(max_epochs: int, model: nn.Module, optimizer: torch.optim, train_loader,
             model, val_loader, loss_fn)
 
         pbar.set_postfix({'Prev Val Loss': val_mloss, 'Prev Val R2': val_r2})
-        wandb.log({'Loss/val': val_mloss, 'R2/val': val_r2, 'Loss/train': train_mloss,
-                   'R2/train': train_r2, 'epoch': epoch})
+        wandb.log({'Epoch Loss/val': val_mloss, 'Epoch R2/val': val_r2, 'Epoch Loss/train': train_mloss,
+                   'Epoch R2/train': train_r2, 'epoch': epoch})
 
         if early_stopping(val_mloss):
             # Log early stopping as event
@@ -190,10 +190,11 @@ def validation_loop(model: nn.Module, val_loader, loss_fn):
     """
         Return mean loss over the validation set
     """
+    model.eval()
+
     horizon = wandb.config.horizon
     losses = []
     r2s = []
-    model.train()
     pbar = tqdm.tqdm(enumerate(val_loader), desc='Validation Batch', position=1,
                      leave=False, total=len(val_loader))
     for batch_idx, batch in pbar:
@@ -292,7 +293,7 @@ def main(args: argparse.Namespace):
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                              patience=5,
+                                                              patience=3,
                                                               verbose=True)
 
     wandb.watch(model, criterion=loss_fn, log='all', log_freq=100)
@@ -314,13 +315,14 @@ def main(args: argparse.Namespace):
         # Test the model
         test(model, test_loader, loss_fn, device)
 
+    print("Finished training and testing, saving model and profile")
     # Save the model
-    model_art = wandb.Artifact('model', type='model')
-    model_art.add_file(f'{args.model_dir}/{args.model_name}.pt')
+    model_art = wandb.Artifact(args.model_name, type='model')
+    model_art.add_dir(args.model_dir)
     model_art.save()
 
-    profile_art = wandb.Artifact('trace', type='profile')
-    profile_art.add_file(f'{args.log_dir}/{args.model_name}_trace.json')
+    profile_art = wandb.Artifact(f'{args.model_name}_trace', type='profile')
+    profile_art.add_dir(args.log_dir)
     profile_art.save()
 
 

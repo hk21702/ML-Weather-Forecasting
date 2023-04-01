@@ -8,14 +8,15 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--epochs',
         type=int,
-        default=10,
+        default=20,
         help='Max number of epochs to train the model for')
 
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128,
-        help='Batch size to use when training the model. Default: 128')
+        default=64,
+        help='Batch size to use when training the model. Try to keep it as a power of '\
+            '2 for better results. Default: 64')
 
     choices = ['conv_lstm', 'lstm', 'gru']
 
@@ -83,7 +84,7 @@ def setup_train_args() -> argparse.ArgumentParser:
     parser.add_argument(
         '--context_steps',
         type=int,
-        default=16,
+        default=12,
         help='Context time steps (hours) used for input')
 
     # Horizon
