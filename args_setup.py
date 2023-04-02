@@ -37,6 +37,23 @@ def setup_train_args() -> argparse.ArgumentParser:
         choices=choices,
         default='selu',
         help=f'Activation function to use. Default: relu. Choices: {choices}')
+    
+    # Dropout variants
+    choices = ['dropout', 'dropout2d', 'dropout3d', 'alpha_dropout']
+
+    parser.add_argument(
+        '--dropout_type',
+        type=str,
+        choices=choices,
+        default='dropout',
+        help=f'Dropout type to use. Default: dropout. Choices: {choices}')
+    
+    # Dropout rate
+    parser.add_argument(
+        '--dropout_rate',
+        type=float,
+        default=0.5,
+        help='Dropout rate to use. Default: 0.5')
 
     parser.add_argument(
         '--train_path',

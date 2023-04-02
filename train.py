@@ -2,7 +2,6 @@
 import argparse
 
 import numpy as np
-import pandas as pd
 import torch
 import tqdm
 import xarray as xr
@@ -103,7 +102,7 @@ def setup_loaders_config(
     # Create the data loaders
     train_loader = DataLoader(train_dp,
                               batch_size=wandb.config.batch_size,
-                              shuffle=True)
+                              shuffle=False)
 
     val_loader = DataLoader(val_dp,
                             batch_size=wandb.config.batch_size,
@@ -288,8 +287,7 @@ def main(args: argparse.Namespace):
 
     # Create the model
     if args.model_type == 'conv_lstm':
-        model = ConvLSTMModel(0.7,
-                              config,
+        model = ConvLSTMModel(config,
                               wandb.config)
     else:
         raise NotImplementedError(

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch import autocast
 from axial_attention import AxialAttention, AxialPositionalEmbedding
 
 from network.layers.condition_time import ConditionTime
@@ -14,7 +15,6 @@ class ConvLSTMModel(nn.Module):
     """Convolutional LSTM model"""
 
     def __init__(self,
-                 dropout: float,
                  model_config: ModelConfig,
                  wb_config):
         super(ConvLSTMModel, self).__init__()
@@ -48,7 +48,19 @@ class ConvLSTMModel(nn.Module):
             activation_fn=self.activation_fn,
         )
 
-        self.drop = nn.Dropout(dropout)
+        dropout_rate = wb_config.dropout_rate
+
+        if wb_config.dropout_type == 'dropout':
+            self.drop = nn.Dropout()
+        elif wb_config.dropout_type == 'dropout2d':
+            self.drop = nn.Dropout2d(dropout_rate)
+        elif wb_config.dropout_type == 'dropout3d':
+            self.drop = nn.Dropout3d(dropout_rate)
+        elif wb_config.dropout_type == 'alpha_dropout':
+            self.drop = nn.AlphaDropout(dropout_rate)
+        else:
+            raise ValueError(
+                f'Unknown dropout type: {wb_config.dropout_type}')
 
         self.ct = ConditionTime(self.horizon)
 
