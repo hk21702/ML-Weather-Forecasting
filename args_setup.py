@@ -1,3 +1,7 @@
+"""
+This module contains the setup for the training arguments
+"""
+
 import argparse
 
 

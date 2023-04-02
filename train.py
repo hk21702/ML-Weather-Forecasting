@@ -11,11 +11,11 @@ from torchdata.datapipes.iter import IterableWrapper
 
 import wandb
 from args_setup import setup_train_args
-from train_utils import EarlyStopping, r2_loss
 from network.model_config import ModelConfig
-from network.models.conv_lstm_model import ConvLSTMModel
 from network.models.conv_gru_model import ConvGRUModel
+from network.models.conv_lstm_model import ConvLSTMModel
 from network.window_iter_ds import WindowIterDS
+from train_utils import EarlyStopping, r2_loss
 
 
 def get_args() -> argparse.Namespace:

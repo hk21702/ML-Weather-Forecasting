@@ -7,11 +7,10 @@ from network.layers.conv_gru import ConvGRU
 from network.layers.distribute_time import DistributeTime
 from network.layers.down_sampler import DownSampler
 from network.model_config import ModelConfig
-from network.models.model_utils import get_activation_func
 
 
 class ConvGRUModel(nn.Module):
-    """Convolutional LSTM model"""
+    """Convolutional GRU model"""
 
     def __init__(self,
                  model_config: ModelConfig,
@@ -34,8 +33,6 @@ class ConvGRUModel(nn.Module):
             self.input_channels + self.horizon, self.input_channels,
             device=device))
 
-        self.activation_fn = get_activation_func(wb_config.activation_fn)
-
         if isinstance(self.kernel_size, tuple):
             conv_gru_ksize = (self.kernel_size[0], self.kernel_size[1])
         else:
@@ -46,7 +43,7 @@ class ConvGRUModel(nn.Module):
             hidden_dim=self.hidden_dims,
             kernel_size=conv_gru_ksize,
             num_layers=self.hidden_layers,
-            activation_fn=self.activation_fn,
+            activation_type=wb_config.activation_fn,
             device=device
         )
 
