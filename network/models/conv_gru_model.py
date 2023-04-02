@@ -1,10 +1,10 @@
 import torch
-from torch import nn
 from axial_attention import AxialAttention, AxialPositionalEmbedding
+from torch import nn
 
 from network.layers.condition_time import ConditionTime
-from network.layers.distribute_time import DistributeTime
 from network.layers.conv_gru import ConvGRU
+from network.layers.distribute_time import DistributeTime
 from network.layers.down_sampler import DownSampler
 from network.model_config import ModelConfig
 from network.models.model_utils import get_activation_func
@@ -15,7 +15,8 @@ class ConvGRUModel(nn.Module):
 
     def __init__(self,
                  model_config: ModelConfig,
-                 wb_config):
+                 wb_config,
+                 device):
         super().__init__()
 
         self.model_config = model_config
@@ -30,7 +31,8 @@ class ConvGRUModel(nn.Module):
         self.horizon = self.model_config.horizon
 
         self.encoder = DistributeTime(DownSampler(
-            self.input_channels + self.horizon, self.input_channels))
+            self.input_channels + self.horizon, self.input_channels,
+            device=device))
 
         self.activation_fn = get_activation_func(wb_config.activation_fn)
 
@@ -45,6 +47,7 @@ class ConvGRUModel(nn.Module):
             kernel_size=conv_gru_ksize,
             num_layers=self.hidden_layers,
             activation_fn=self.activation_fn,
+            device=device
         )
 
         dropout_rate = wb_config.dropout_rate
@@ -66,7 +69,7 @@ class ConvGRUModel(nn.Module):
 
         self.axial_pos_emb = AxialPositionalEmbedding(
             dim=self.hidden_dims,
-            shape=(shape, shape),
+            shape=(shape, shape)
         )
 
         self.agg_attention = nn.Sequential(
@@ -79,7 +82,8 @@ class ConvGRUModel(nn.Module):
         self.head = nn.Conv2d(
             in_channels=self.hidden_dims,
             out_channels=self.output_chans,
-            kernel_size=(1, 1)
+            kernel_size=(1, 1),
+            device=device
         )
 
     def forward(self, x: torch.Tensor, step: int):

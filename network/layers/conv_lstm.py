@@ -16,7 +16,8 @@ class ConvLSTMCell(nn.Module):
 
     def __init__(self, input_dims: int, hidden_dims: int,
                  k_size: tuple[int, int], bias: bool = True,
-                 activation_fn: nn.Module = torch.tanh) -> None:
+                 activation_fn: nn.Module = torch.tanh,
+                 device: torch.device = torch.device('cpu')) -> None:
         """
         Init conv LSTM cell.
 
@@ -43,7 +44,8 @@ class ConvLSTMCell(nn.Module):
             out_channels=4 * self.hidden_dims,
             kernel_size=self.k_size,
             padding=self.padding,
-            bias=self.bias
+            bias=self.bias,
+            device=device
         )
 
     def forward(self, x: torch.Tensor, current_state: tuple()) -> torch.Tensor:
@@ -89,7 +91,8 @@ class ConvLSTM(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int,
                  kernel_size: int, num_layers: int,
                  bias: bool = True,
-                 activation_fn: nn.Module = torch.tanh) -> None:
+                 activation_fn: nn.Module = torch.tanh,
+                 device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
         # Create multiple instances of activation functions as some
         # may be trainable!!!!
@@ -115,7 +118,8 @@ class ConvLSTM(nn.Module):
                                           hidden_dims=self.hidden_dim[i],
                                           k_size=self.kernel_size[i],
                                           bias=self.bias,
-                                          activation_fn=activation[i]))
+                                          activation_fn=activation[i],
+                                          device=device))
 
         self.cell_list = nn.ModuleList(cell_list)
 

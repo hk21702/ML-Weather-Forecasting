@@ -6,11 +6,15 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 
-
 class ConvGRUCell(nn.Module):
+    """
+    Convolutional GRU cell
+    """
+
     def __init__(self, input_dims: int, hidden_dims: int,
                  k_size: tuple[int, int], bias: bool = True,
-                 activation_fn: nn.Module = torch.tanh) -> None:
+                 activation_fn: nn.Module = torch.tanh,
+                 device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
 
         self.input_dims = input_dims
@@ -26,7 +30,8 @@ class ConvGRUCell(nn.Module):
             out_channels=2 * self.hidden_dims,
             kernel_size=self.k_size,
             padding=self.padding,
-            bias=self.bias
+            bias=self.bias,
+            device=device
         )
 
         self.conv_update = nn.Conv2d(
@@ -34,24 +39,29 @@ class ConvGRUCell(nn.Module):
             out_channels=self.hidden_dims,
             kernel_size=self.k_size,
             padding=self.padding,
-            bias=self.bias
+            bias=self.bias,
+            device=device
         )
 
     def init_hidden(self, input: torch.Tensor):
         batch_size, _, h, w = input.shape
-        return Variable(torch.zeros(batch_size, self.hidden_dims, h, w, device=self.conv_gates.weight.device))
-    
+        return Variable(torch.zeros(batch_size, self.hidden_dims, h, w, device=input.device))
+
     def reset_parameters(self) -> None:
         """
         Re-initializes the parameters of the cell.
         """
         # Gates
-        nn.init.xavier_uniform_(self.conv_gates.weight, gain=nn.init.calculate_gain(self.activation_fn))
+        nn.init.xavier_uniform_(self.conv_gates.weight,
+                                gain=nn.init.calculate_gain(self.activation_fn))
         self.conv_gates.bias.data.zero_()
+        self.conv_gates.retain_grad()
 
         # Update
-        nn.init.xavier_uniform_(self.conv_update.weight, gain=nn.init.calculate_gain(self.activation_fn))
+        nn.init.xavier_uniform_(self.conv_update.weight,
+                                gain=nn.init.calculate_gain(self.activation_fn))
         self.conv_update.bias.data.zero_()
+        self.conv_update.retain_grad()
 
     def forward(self, input: torch.Tensor, h_prev):
         cat_x = torch.cat([input, h_prev], dim=1)
@@ -72,10 +82,14 @@ class ConvGRUCell(nn.Module):
 
         return next_hidden_state
 
-
 class ConvGRU(nn.Module):
+    """
+    Convolutional GRU layer
+    """
+
     def __init__(self, input_dim, hidden_dim, kernel_size, num_layers, bias=True,
-                 activation_fn=torch.tanh):
+                 activation_fn=torch.tanh,
+                 device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
 
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
@@ -97,8 +111,8 @@ class ConvGRU(nn.Module):
                                          self.hidden_dim[i],
                                          kernel_size[i],
                                          self.bias,
-                                         activation_fn[i])
-                             )
+                                         activation_fn[i],
+                                         device=device))
 
         self.cell_list = nn.ModuleList(cell_list)
 

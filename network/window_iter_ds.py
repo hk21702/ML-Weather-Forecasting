@@ -1,5 +1,3 @@
-import itertools
-
 import torch
 import xarray as xr
 import xbatcher
@@ -84,10 +82,8 @@ class WindowIterDS(IterableDataset):
             'time', 'channels', 'latitude', 'longitude')
         labels = labels.transpose('time', 'channels', 'latitude', 'longitude')
 
-        features = torch.from_numpy(features.to_numpy()).to(
-            self.device, dtype=torch.float)
-        labels = torch.from_numpy(labels.to_numpy()).to(
-            self.device, dtype=torch.float)
+        features = torch.as_tensor(features.to_numpy(), dtype=torch.float32, device=self.device)
+        labels = torch.as_tensor(labels.to_numpy(), dtype=torch.float32, device=self.device)
         return features, labels
 
     def __iter__(self):

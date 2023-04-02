@@ -11,12 +11,14 @@ from torchdata.datapipes.iter import IterableWrapper
 
 import wandb
 from args_setup import setup_train_args
-from model_utils import EarlyStopping, r2_loss
+from train_utils import EarlyStopping, r2_loss
 from network.model_config import ModelConfig
 from network.models.conv_lstm_model import ConvLSTMModel
 from network.models.conv_gru_model import ConvGRUModel
 from network.window_iter_ds import WindowIterDS
+import torch._dynamo as dynamo
 
+dynamo.config.verbose = True
 
 def get_args() -> argparse.Namespace:
     """
@@ -121,9 +123,7 @@ def setup_loaders_config(
 
 
 def fit(max_epochs: int, model: nn.Module, optimizer: torch.optim, train_loader, val_loader, loss_fn,
-        scheduler: torch.optim.lr_scheduler, device: torch.device):
-    model = model.to(device)
-
+        scheduler: torch.optim.lr_scheduler):
     early_stopping = EarlyStopping(tolerance=wandb.config.early_stop_tolerance)
 
     pbar = tqdm.tqdm(range(max_epochs), desc='Epoch', position=0)
@@ -167,7 +167,7 @@ def training_loop(model: nn.Module, optimizer: torch.optim, train_loader, loss_f
 
         count = 1
         for step in range(forecast_step, horizon):
-            y_hat = model(x, torch.tensor(step).long())
+            y_hat = model(x, torch.as_tensor(step, device=x.get_device()))
             loss += loss_fn(y_hat,
                             y[:, step, :])
             count += 1
@@ -216,7 +216,7 @@ def validation_loop(model: nn.Module, val_loader, loss_fn):
         count = 1
 
         for step in range(forecast_step, horizon):
-            y_hat = model(x, torch.tensor(step).long())
+            y_hat = model(x, torch.as_tensor(step, device=x.get_device()))
             loss += loss_fn(y_hat,
                             y[:, step, :])
             r2 += r2_loss(y_hat, y[:, step, :])
@@ -237,14 +237,12 @@ def validation_loop(model: nn.Module, val_loader, loss_fn):
     return np.mean(losses), np.mean(r2s)
 
 
-def test(model: nn.Module, test_loader, loss_fn, device: torch.device):
+def test(model: nn.Module, test_loader, loss_fn):
     """
         Return mean loss over the test set.
 
         Also logs to wandb
     """
-    model = model.to(device)
-
     model.eval()
 
     horizon = wandb.config.horizon
@@ -263,7 +261,7 @@ def test(model: nn.Module, test_loader, loss_fn, device: torch.device):
         count = 1
 
         for step in range(forecast_step, horizon):
-            y_hat = model(x, torch.tensor(step).long())
+            y_hat = model(x, torch.as_tensor(step).long())
             loss += loss_fn(y_hat,
                             y[:, step, :])
             r2 += r2_loss(y_hat, y[:, step, :])
@@ -294,21 +292,20 @@ def main(args: argparse.Namespace):
     # Create the model
     if args.model_type == 'conv_lstm':
         model = ConvLSTMModel(config,
-                              wandb.config)
+                              wandb.config,
+                              device)
     elif args.model_type == 'conv_gru':
         model = ConvGRUModel(config,
-                             wandb.config)
+                             wandb.config,
+                             device)
     else:
         raise NotImplementedError(
             f'{args.model_type} is not a valid model type')
 
-    # Compile model if enabled
-    if args.compile:
-        model = torch.compile(model, mode='reduce-overhead')
-
+    model.to(device)
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, fused=True)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                               patience=wandb.config.lr_patience,
                                                               verbose=True)
@@ -327,10 +324,10 @@ def main(args: argparse.Namespace):
     with profiler:
         # Train the model
         fit(args.epochs, model, optimizer, train_loader, val_loader, loss_fn,
-            lr_scheduler, device)
+            lr_scheduler)
 
         # Test the model
-        test(model, test_loader, loss_fn, device)
+        test(model, test_loader, loss_fn)
 
         print("Finished training and testing, saving model and profile")
 

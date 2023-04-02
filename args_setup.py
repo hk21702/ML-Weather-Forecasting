@@ -158,12 +158,5 @@ def setup_train_args() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help='Number of epochs to wait before early stopping, Default 5')
-    
-    # Compile model?
-    parser.add_argument(
-        '--compile',
-        action='store_true',
-        default=False,
-        help='Compile the model using Pytorch 2.0 before training. Only supported on Linux!')
 
     return parser
