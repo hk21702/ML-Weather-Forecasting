@@ -2,11 +2,13 @@
 Convolutional GRU layer
 """
 
-import torch
-from torch import nn
-from torch.autograd import Variable
+from typing import Optional
 
-class ConvGRUCell(nn.Module):
+import torch
+from torch import jit, nn
+
+
+class ConvGRUCell(jit.ScriptModule):
     """
     Convolutional GRU cell
     """
@@ -43,9 +45,9 @@ class ConvGRUCell(nn.Module):
             device=device
         )
 
-    def init_hidden(self, input: torch.Tensor):
-        batch_size, _, h, w = input.shape
-        return Variable(torch.zeros(batch_size, self.hidden_dims, h, w, device=input.device))
+    def init_hidden(self, x: torch.Tensor) -> torch.Tensor:
+        batch_size, _, h, w = x.shape
+        return torch.zeros(batch_size, self.hidden_dims, h, w, device=x.device)
 
     def reset_parameters(self) -> None:
         """
@@ -63,6 +65,7 @@ class ConvGRUCell(nn.Module):
         self.conv_update.bias.data.zero_()
         self.conv_update.retain_grad()
 
+    @jit.script_method
     def forward(self, input: torch.Tensor, h_prev):
         cat_x = torch.cat([input, h_prev], dim=1)
 
@@ -82,7 +85,8 @@ class ConvGRUCell(nn.Module):
 
         return next_hidden_state
 
-class ConvGRU(nn.Module):
+
+class ConvGRU(jit.ScriptModule):
     """
     Convolutional GRU layer
     """
@@ -116,7 +120,8 @@ class ConvGRU(nn.Module):
 
         self.cell_list = nn.ModuleList(cell_list)
 
-    def forward(self, input, hidden_state=None):
+    @jit.script_method
+    def forward(self, input, hidden_state: Optional[list[torch.Tensor]] = None):
         c_layer_input = torch.unbind(input, dim=1)
 
         if hidden_state is None:
@@ -127,11 +132,11 @@ class ConvGRU(nn.Module):
         layer_output_list = []
         layer_state_list = []
 
-        for layer_idx in range(self.num_layers):
+        for layer_idx, cell in enumerate(self.cell_list):
             h = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
-                h = self.cell_list[layer_idx](c_layer_input[t], h)
+                h = cell(c_layer_input[t], h)
                 output_inner.append(h)
 
             c_layer_input = torch.stack(output_inner)
@@ -142,11 +147,8 @@ class ConvGRU(nn.Module):
         layer_state_list = torch.stack(layer_state_list, dim=0)
         return layer_output_list, layer_state_list
 
-    def _init_hidden(self, input):
-        init_states = []
-        for i in range(self.num_layers):
-            init_states.append(self.cell_list[i].init_hidden(input))
-        return init_states
+    def _init_hidden(self, input) -> list[torch.Tensor]:
+        return [cell.init_hidden(input) for cell in self.cell_list]
 
     @ staticmethod
     def _extend_for_multilayer(param, num_layers: int) -> list:

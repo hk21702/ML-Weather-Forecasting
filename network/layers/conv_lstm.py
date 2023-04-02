@@ -5,11 +5,12 @@ the image like time series data.
 Heavy influcence from https://github.com/ndrplz/ConvLSTM_pytorch (MIT License)
 """
 from typing import Optional
+
 import torch
-from torch import nn
+from torch import jit, nn
 
 
-class ConvLSTMCell(nn.Module):
+class ConvLSTMCell(jit.ScriptModule):
     """
     Convolutional LSTM cell
     """
@@ -48,7 +49,8 @@ class ConvLSTMCell(nn.Module):
             device=device
         )
 
-    def forward(self, x: torch.Tensor, current_state: tuple()) -> torch.Tensor:
+    @jit.script_method
+    def forward(self, x: torch.Tensor, current_state: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         h_cur, c_cur = current_state
         cat_x = torch.cat([x, h_cur], dim=1)
 
@@ -65,7 +67,7 @@ class ConvLSTMCell(nn.Module):
 
         return h_next, c_next
 
-    def init_hidden(self, x: torch.Tensor) -> tuple():
+    def init_hidden(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Inits the hidden state of the LSTM.
 
@@ -73,8 +75,8 @@ class ConvLSTMCell(nn.Module):
             x (torch.Tensor): Input tensor (batch_size, time, input_chans, height, width)
         """
         batch_size, _, _, height, width = x.size()
-        return (torch.zeros(batch_size, self.hidden_dims, height, width, device=self.conv.weight.device),
-                torch.zeros(batch_size, self.hidden_dims, height, width, device=self.conv.weight.device))
+        return (torch.zeros(batch_size, self.hidden_dims, height, width, device=x.device),
+                torch.zeros(batch_size, self.hidden_dims, height, width, device=x.device))
 
     def reset_parameters(self) -> None:
         """Resets parameters"""
@@ -83,7 +85,7 @@ class ConvLSTMCell(nn.Module):
         self.conv.bias.data.zero_()
 
 
-class ConvLSTM(nn.Module):
+class ConvLSTM(jit.ScriptModule):
     """
     Convolutional LSTM
     """
@@ -126,8 +128,9 @@ class ConvLSTM(nn.Module):
         for cell in self.cell_list:
             cell.reset_parameters()
 
+    @jit.script_method
     def forward(self, input_tensor: torch.Tensor,
-                hidden_states: Optional[list] = None) -> tuple():
+                hidden_states: Optional[list[torch.TensorType]] = None) -> tuple():
         c_layer_input = torch.unbind(input_tensor, dim=1)
 
         if not hidden_states:
@@ -137,12 +140,12 @@ class ConvLSTM(nn.Module):
 
         seq_len = len(c_layer_input)
 
-        for i in range(self.num_layers):
+        for i, cell in enumerate(self.cell_list):
             h, c = hidden_states[i]
             output_inner = []
 
             for t in range(seq_len):
-                h, c = self.cell_list[i](c_layer_input[t], [h, c])
+                h, c = cell(c_layer_input[t], [h, c])
                 output_inner.append(h)
 
             c_layer_input = output_inner
@@ -152,11 +155,8 @@ class ConvLSTM(nn.Module):
 
         return layer_output, last_state_list
 
-    def _init_hidden(self, input_tensor: torch.Tensor) -> list:
-        return [
-            self.cell_list[i].init_hidden(input_tensor)
-            for i in range(self.num_layers)
-        ]
+    def _init_hidden(self, input_tensor: torch.Tensor) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        return [cell.init_hidden(input_tensor) for cell in self.cell_list]
 
     @staticmethod
     def _extend_for_multilayer(param, num_layers: int) -> list:
