@@ -155,7 +155,7 @@ class ConvLSTM(nn.Module):
         ]
 
     @staticmethod
-    def _extend_for_multilayer(param, num_layers: int) -> tuple[int, int]:
+    def _extend_for_multilayer(param, num_layers: int) -> list:
         """
         Extends the given param to a list with length num_layers.
         """
