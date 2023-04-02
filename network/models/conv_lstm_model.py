@@ -7,7 +7,6 @@ from network.layers.conv_lstm import ConvLSTM
 from network.layers.distribute_time import DistributeTime
 from network.layers.down_sampler import DownSampler
 from network.model_config import ModelConfig
-from network.models.model_utils import get_activation_func
 
 
 class ConvLSTMModel(nn.Module):
@@ -34,8 +33,6 @@ class ConvLSTMModel(nn.Module):
             self.input_channels + self.horizon, self.input_channels,
             device=device))
 
-        self.activation_fn = get_activation_func(wb_config.activation_fn)
-
         if isinstance(self.kernel_size, tuple):
             conv_lstm_ksize = self.kernel_size[0]
         else:
@@ -46,7 +43,7 @@ class ConvLSTMModel(nn.Module):
             hidden_dim=self.hidden_dims,
             kernel_size=conv_lstm_ksize,
             num_layers=self.hidden_layers,
-            activation_fn=self.activation_fn,
+            activation_type=wb_config.activation_fn,
             device=device
         )
 

@@ -4,10 +4,12 @@ the image like time series data.
 
 Heavy influcence from https://github.com/ndrplz/ConvLSTM_pytorch (MIT License)
 """
-from typing import Optional
+from typing import Union
 
 import torch
 from torch import jit, nn
+
+from network.models.model_utils import get_activation_func
 
 
 class ConvLSTMCell(jit.ScriptModule):
@@ -50,7 +52,7 @@ class ConvLSTMCell(jit.ScriptModule):
         )
 
     @jit.script_method
-    def forward(self, x: torch.Tensor, current_state: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, current_state: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         h_cur, c_cur = current_state
         cat_x = torch.cat([x, h_cur], dim=1)
 
@@ -78,10 +80,10 @@ class ConvLSTMCell(jit.ScriptModule):
         return (torch.zeros(batch_size, self.hidden_dims, height, width, device=x.device),
                 torch.zeros(batch_size, self.hidden_dims, height, width, device=x.device))
 
-    def reset_parameters(self) -> None:
+    def reset_parameters(self, activation_type: str) -> None:
         """Resets parameters"""
         nn.init.xavier_uniform_(
-            self.conv.weight, gain=nn.init.calculate_gain(self.activation_fn))
+            self.conv.weight, gain=nn.init.calculate_gain(activation_type))
         self.conv.bias.data.zero_()
 
 
@@ -93,14 +95,15 @@ class ConvLSTM(jit.ScriptModule):
     def __init__(self, input_dim: int, hidden_dim: int,
                  kernel_size: int, num_layers: int,
                  bias: bool = True,
-                 activation_fn: nn.Module = torch.tanh,
+                 activation_type: str = 'tanh',
                  device: torch.device = torch.device('cpu')) -> None:
         super().__init__()
+        activation_fn = get_activation_func(activation_type)
         # Create multiple instances of activation functions as some
         # may be trainable!!!!
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
         hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
-        activation = self._extend_for_multilayer(activation_fn, num_layers)
+        activation_fn = self._extend_for_multilayer(activation_fn, num_layers)
         if not len(hidden_dim) == len(kernel_size) == num_layers:
             raise ValueError("Inconsistent list length.")
 
@@ -120,36 +123,34 @@ class ConvLSTM(jit.ScriptModule):
                                           hidden_dims=self.hidden_dim[i],
                                           k_size=self.kernel_size[i],
                                           bias=self.bias,
-                                          activation_fn=activation[i],
+                                          activation_fn=activation_fn[i],
                                           device=device))
 
         self.cell_list = nn.ModuleList(cell_list)
 
         for cell in self.cell_list:
-            cell.reset_parameters()
+            cell.reset_parameters(activation_type)
 
     @jit.script_method
     def forward(self, input_tensor: torch.Tensor,
-                hidden_states: Optional[list[torch.TensorType]] = None) -> tuple():
+                hidden_states: Union[list[tuple[torch.Tensor, torch.Tensor]], None] = None) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
         c_layer_input = torch.unbind(input_tensor, dim=1)
 
-        if not hidden_states:
+        if hidden_states is None:
             hidden_states = self._init_hidden(input_tensor)
 
-        last_state_list = []
-
-        seq_len = len(c_layer_input)
+        last_state_list: list[tuple[torch.Tensor, torch.Tensor]] = []
 
         for i, cell in enumerate(self.cell_list):
             h, c = hidden_states[i]
             output_inner = []
 
-            for t in range(seq_len):
-                h, c = cell(c_layer_input[t], [h, c])
+            for c_input in c_layer_input:
+                h, c = cell(c_input, (h, c))
                 output_inner.append(h)
 
             c_layer_input = output_inner
-            last_state_list.append([h, c])
+            last_state_list.append((h, c))
 
         layer_output = torch.stack(output_inner, dim=1)
 

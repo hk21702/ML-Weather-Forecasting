@@ -16,9 +16,7 @@ from network.model_config import ModelConfig
 from network.models.conv_lstm_model import ConvLSTMModel
 from network.models.conv_gru_model import ConvGRUModel
 from network.window_iter_ds import WindowIterDS
-import torch._dynamo as dynamo
 
-dynamo.config.verbose = True
 
 def get_args() -> argparse.Namespace:
     """
@@ -335,10 +333,6 @@ def main(args: argparse.Namespace):
     model_art = wandb.Artifact(args.model_name, type='model')
     model_art.add_dir(args.model_dir)
     model_art.save()
-
-    profile_art = wandb.Artifact(f'{args.model_name}_trace', type='profile')
-    profile_art.add_dir(args.log_dir)
-    profile_art.save()
 
 
 if __name__ == '__main__':
