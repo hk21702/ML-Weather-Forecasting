@@ -24,7 +24,7 @@ def setup_train_args() -> argparse.ArgumentParser:
         '--model_type',
         type=str,
         choices=choices,
-        default='conv_gru',
+        default='conv_lstm',
         help=f'Model type to use. Note that non conv3d is single shot\
                 Default: conv_lstm. Choices: {choices}')
 
