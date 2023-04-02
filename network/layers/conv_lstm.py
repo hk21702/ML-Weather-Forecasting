@@ -77,7 +77,7 @@ class ConvLSTMCell(nn.Module):
     def reset_parameters(self) -> None:
         """Resets parameters"""
         nn.init.xavier_uniform_(
-            self.conv.weight, gain=nn.init.calculate_gain("relu"))
+            self.conv.weight, gain=nn.init.calculate_gain(self.activation_fn))
         self.conv.bias.data.zero_()
 
 

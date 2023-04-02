@@ -4,6 +4,7 @@ Convolutional GRU layer
 
 import torch
 from torch import nn
+from torch.autograd import Variable
 
 
 class ConvGRUCell(nn.Module):
@@ -37,13 +38,22 @@ class ConvGRUCell(nn.Module):
         )
 
     def init_hidden(self, input: torch.Tensor):
-        batch_size, _, _, h, w = input.shape
-        return torch.zeros(batch_size, self.hidden_dims, h, w)
+        batch_size, _, h, w = input.shape
+        return Variable(torch.zeros(batch_size, self.hidden_dims, h, w, device=self.conv_gates.weight.device))
+    
+    def reset_parameters(self) -> None:
+        """
+        Re-initializes the parameters of the cell.
+        """
+        # Gates
+        nn.init.xavier_uniform_(self.conv_gates.weight, gain=nn.init.calculate_gain(self.activation_fn))
+        self.conv_gates.bias.data.zero_()
 
-    def forward(self, input: torch.Tensor, h_prev=None):
-        if h_prev is None:
-            h_prev = self.init_hidden(input)
+        # Update
+        nn.init.xavier_uniform_(self.conv_update.weight, gain=nn.init.calculate_gain(self.activation_fn))
+        self.conv_update.bias.data.zero_()
 
+    def forward(self, input: torch.Tensor, h_prev):
         cat_x = torch.cat([input, h_prev], dim=1)
 
         cat_conv = self.conv_gates(cat_x)
@@ -54,12 +64,13 @@ class ConvGRUCell(nn.Module):
 
         cat_x = torch.cat([input, reset_gate * h_prev], dim=1)
 
-        h_next = self.conv_update(cat_x)
-        h_next = self.activation_fn(h_next)
+        next_hidden_state = self.conv_update(cat_x)
+        next_hidden_state = self.activation_fn(next_hidden_state)
 
-        h_next = (1 - update_gate) * h_prev + update_gate * h_next
+        next_hidden_state = (1 - update_gate) * h_prev + \
+            update_gate * next_hidden_state
 
-        return h_next
+        return next_hidden_state
 
 
 class ConvGRU(nn.Module):
@@ -95,7 +106,7 @@ class ConvGRU(nn.Module):
         c_layer_input = torch.unbind(input, dim=1)
 
         if hidden_state is None:
-            hidden_state = self._init_hidden(input)
+            hidden_state = self._init_hidden(c_layer_input[0])
 
         seq_len = len(c_layer_input)
 
@@ -109,12 +120,12 @@ class ConvGRU(nn.Module):
                 h = self.cell_list[layer_idx](c_layer_input[t], h)
                 output_inner.append(h)
 
-            layer_output = torch.stack(output_inner, dim=1)
-            c_layer_input = layer_output
+            c_layer_input = torch.stack(output_inner)
 
-            layer_output_list.append(output_inner)
             layer_state_list.append(h)
 
+        layer_output_list = torch.stack(output_inner, dim=1)
+        layer_state_list = torch.stack(layer_state_list, dim=0)
         return layer_output_list, layer_state_list
 
     def _init_hidden(self, input):

@@ -18,13 +18,13 @@ def setup_train_args() -> argparse.ArgumentParser:
         help='Batch size to use when training the model. Try to keep it as a power of '
         '2 for better results. Default: 32')
 
-    choices = ['conv_lstm', 'conv_gru', 'conv3d']
+    choices = ['conv_lstm', 'conv_gru']
 
     parser.add_argument(
         '--model_type',
         type=str,
         choices=choices,
-        default='conv_lstm',
+        default='conv_gru',
         help=f'Model type to use. Note that non conv3d is single shot\
                 Default: conv_lstm. Choices: {choices}')
 
@@ -36,10 +36,10 @@ def setup_train_args() -> argparse.ArgumentParser:
         type=str,
         choices=choices,
         default='selu',
-        help=f'Activation function to use. Default: relu. Choices: {choices}')
+        help=f'Activation function to use. Default: selu. Choices: {choices}')
     
     # Dropout variants
-    choices = ['dropout', 'dropout2d', 'dropout3d', 'alpha_dropout']
+    choices = ['dropout', 'alpha_dropout']
 
     parser.add_argument(
         '--dropout_type',
@@ -54,6 +54,14 @@ def setup_train_args() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help='Dropout rate to use. Default: 0.5')
+    
+    # Post conv dropout rate
+    parser.add_argument(
+        '--post_conv_dropout_rate',
+        type=float,
+        default=0,
+        help='Dropout rate to use after the conv layers. Set to 0 to disable. Suggested 0.2 Default: 0')
+    
 
     parser.add_argument(
         '--train_path',
@@ -150,5 +158,12 @@ def setup_train_args() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help='Number of epochs to wait before early stopping, Default 5')
+    
+    # Compile model?
+    parser.add_argument(
+        '--compile',
+        action='store_true',
+        default=False,
+        help='Compile the model using Pytorch 2.0 before training. Only supported on Linux!')
 
     return parser

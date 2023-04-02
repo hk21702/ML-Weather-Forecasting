@@ -14,6 +14,7 @@ from args_setup import setup_train_args
 from model_utils import EarlyStopping, r2_loss
 from network.model_config import ModelConfig
 from network.models.conv_lstm_model import ConvLSTMModel
+from network.models.conv_gru_model import ConvGRUModel
 from network.window_iter_ds import WindowIterDS
 
 
@@ -63,8 +64,12 @@ def setup_loaders_config(
     for feat in args.target_feats:
         assert feat in feature_variables, f'{feat} is not a valid feature'
 
-    device = torch.device(
-        "cpu") if not torch.cuda.is_available() else torch.device("cuda")
+    if torch.cuda.is_available():
+        print("Using GPU/CUDA")
+        device = torch.device("cuda")
+    else:
+        print("Using CPU. CUDA not available.")
+        device = torch.device("cpu")
 
     # Create the datasets from window iter ds
     train_data = WindowIterDS(train_data,
@@ -284,19 +289,28 @@ def main(args: argparse.Namespace):
     # Set up the data loaders and model config
     train_loader, val_loader, test_loader, config, device = setup_loaders_config(
         args)
+    torch.backends.cudnn.benchmark = True
 
     # Create the model
     if args.model_type == 'conv_lstm':
         model = ConvLSTMModel(config,
                               wandb.config)
+    elif args.model_type == 'conv_gru':
+        model = ConvGRUModel(config,
+                             wandb.config)
     else:
         raise NotImplementedError(
             f'{args.model_type} is not a valid model type')
 
+    # Compile model if enabled
+    if args.compile:
+        model = torch.compile(model, mode='reduce-overhead')
+
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=args.learning_rate)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                              patience=2,
+                                                              patience=wandb.config.lr_patience,
                                                               verbose=True)
 
     wandb.watch(model, criterion=loss_fn, log='all', log_freq=100)
@@ -310,7 +324,7 @@ def main(args: argparse.Namespace):
         with_stack=True
     )
 
-    with profiler as prof:
+    with profiler:
         # Train the model
         fit(args.epochs, model, optimizer, train_loader, val_loader, loss_fn,
             lr_scheduler, device)
@@ -318,7 +332,8 @@ def main(args: argparse.Namespace):
         # Test the model
         test(model, test_loader, loss_fn, device)
 
-    print("Finished training and testing, saving model and profile")
+        print("Finished training and testing, saving model and profile")
+
     # Save the model
     model_art = wandb.Artifact(args.model_name, type='model')
     model_art.add_dir(args.model_dir)

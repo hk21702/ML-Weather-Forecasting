@@ -4,13 +4,13 @@ from axial_attention import AxialAttention, AxialPositionalEmbedding
 
 from network.layers.condition_time import ConditionTime
 from network.layers.distribute_time import DistributeTime
-from network.layers.conv_lstm import ConvLSTM
+from network.layers.conv_gru import ConvGRU
 from network.layers.down_sampler import DownSampler
 from network.model_config import ModelConfig
 from network.models.model_utils import get_activation_func
 
 
-class ConvLSTMModel(nn.Module):
+class ConvGRUModel(nn.Module):
     """Convolutional LSTM model"""
 
     def __init__(self,
@@ -35,14 +35,14 @@ class ConvLSTMModel(nn.Module):
         self.activation_fn = get_activation_func(wb_config.activation_fn)
 
         if isinstance(self.kernel_size, tuple):
-            conv_lstm_ksize = self.kernel_size[0]
+            conv_gru_ksize = (self.kernel_size[0], self.kernel_size[1])
         else:
-            conv_lstm_ksize = self.kernel_size
+            conv_gru_ksize = (self.kernel_size, self.kernel_size)
 
-        self.primary_layer = ConvLSTM(
+        self.primary_layer = ConvGRU(
             input_dim=self.input_channels,
             hidden_dim=self.hidden_dims,
-            kernel_size=conv_lstm_ksize,
+            kernel_size=conv_gru_ksize,
             num_layers=self.hidden_layers,
             activation_fn=self.activation_fn,
         )
@@ -91,7 +91,7 @@ class ConvLSTMModel(nn.Module):
         _, state = self.primary_layer(x)
 
         # Use the last state
-        emb = self.axial_pos_emb(state[-1][0])
+        emb = self.axial_pos_emb(state[-1])
         x_i = self.agg_attention(emb)
 
         res = self.head(x_i)

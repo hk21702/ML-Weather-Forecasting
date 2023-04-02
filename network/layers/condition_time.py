@@ -6,7 +6,7 @@ class ConditionTime(nn.Module):
     """Layer to condition time onto a specific step in the sequence"""
 
     def __init__(self, horizon: int, dims: int = 2) -> None:
-        super(ConditionTime, self).__init__()
+        super().__init__()
         self.horizon = horizon
         self.dims = dims
 
